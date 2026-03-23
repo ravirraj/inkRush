@@ -1,7 +1,16 @@
-package main 
+package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ravirraj/inkRush/server/internal/app"
+)
 
 func main () {
-	fmt.Println("works!!")
+	app := app.NewApp()
+	err := app.Run()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

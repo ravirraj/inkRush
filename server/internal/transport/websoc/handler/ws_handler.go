@@ -43,6 +43,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 		}
 
 		err = json.Unmarshal(message, &envelope)
+		fmt.Println(envelope)
 		if err != nil {
 			fmt.Println("error ", err)
 			continue
@@ -90,7 +91,7 @@ func SendEnvelope(conn *websocket.Conn, messageType string, payload any) error {
 
 	SendEnvelopeStruct.PayLoad = message
 
-	err = conn.WriteJSON(message)
+	err = conn.WriteJSON(SendEnvelopeStruct)
 	if err != nil {
 		fmt.Println(err)
 		return err
