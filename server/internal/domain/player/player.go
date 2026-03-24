@@ -2,6 +2,6 @@ package player
 
 type Player struct {
 	Id              string
-	Nickkname       string
+	Nickname       string
 	CurrentRoomCode string
 }

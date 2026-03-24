@@ -4,13 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ravirraj/inkRush/server/internal/domain/player"
+	"github.com/ravirraj/inkRush/server/internal/store/memory"
 	"github.com/ravirraj/inkRush/server/internal/transport/websoc/protocol"
 )
 
-type WebSocketHandler struct{}
+type WebSocketHandler struct {
+	sessionStore *memory.SessionStore
+}
 type EchoMessage struct {
 	Message string `json:"message"`
 }
@@ -22,7 +28,10 @@ var upgrader = websocket.Upgrader{
 }
 
 func NewWebSocketHandler() *WebSocketHandler {
-	return &WebSocketHandler{}
+
+	return &WebSocketHandler{
+		sessionStore: memory.NewSessionStore(),
+	}
 }
 
 func (h *WebSocketHandler) Handle(c *gin.Context) {
@@ -66,6 +75,43 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			SendEnvelope(conn, protocol.EventSystemPong, &paylaod)
 
+		case protocol.EventSessionInit:
+
+			// basicaly here we are validating the user and adding it to the store (session)
+			var sessionInitPaylaod protocol.SessionInitPayload
+
+			err := json.Unmarshal(envelope.PayLoad, &sessionInitPaylaod)
+
+			if err != nil {
+				fmt.Println("error ", err)
+				continue
+			}
+			if sessionInitPaylaod.Nickname == "" {
+				errPaylaod := protocol.ErrorPayload{
+					ErrorMessage: "Invalid UserName",
+				}
+				fmt.Println("invalid nickname")
+				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+				continue
+			}
+			idGen := time.Now().UnixNano()
+			convertedId := strconv.FormatInt(idGen, 10)
+			playerId := sessionInitPaylaod.Nickname + convertedId
+			player := player.Player{
+				Id:              playerId,
+				Nickname:        sessionInitPaylaod.Nickname,
+				CurrentRoomCode: "",
+			}
+
+			sessionReadyPayload := protocol.SessionReadyPayload{
+				Nickname: player.Nickname,
+				PlayerID: player.Id,
+			}
+
+			h.sessionStore.Add(&player)
+
+			SendEnvelope(conn, protocol.EventSessionReady, sessionReadyPayload)
+
 		default:
 			var payload struct {
 				Message string
@@ -78,6 +124,8 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 	}
 
 }
+
+//this function send the data to the client but in structured way
 
 func SendEnvelope(conn *websocket.Conn, messageType string, payload any) error {
 

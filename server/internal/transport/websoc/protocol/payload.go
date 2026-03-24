@@ -8,3 +8,8 @@ type SessionReadyPayload struct {
 	Nickname string `json:"nickname"`
 	PlayerID string `json:"playerId"`
 }
+
+
+type ErrorPayload struct {
+	ErrorMessage string
+}
