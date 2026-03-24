@@ -1,8 +1,10 @@
 package protocol
 
 const (
-	EventSystemPing  = "system:ping"
-	EventSystemPong  = "system:pong"
-	EventDebugEcho   = "debug:echo"
-	EventSystemError = "system:error"
+	EventSystemPing   = "system:ping"
+	EventSystemPong   = "system:pong"
+	EventDebugEcho    = "debug:echo"
+	EventSystemError  = "system:error"
+	EventSessionInit  = "session:init"
+	EventSessionReady = "session:ready"
 )
