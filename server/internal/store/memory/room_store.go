@@ -20,7 +20,7 @@ func (r *RoomStore) Add(room *room.Room) {
 
 	// id := randomid.GenerateID(6)
 	r.mu.Lock()
-	r.rooms[room.RoomCode] = room
+	r.rooms[room.Code] = room
 	r.mu.Unlock()
 }
 

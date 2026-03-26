@@ -10,12 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/ravirraj/inkRush/server/internal/domain/player"
+	"github.com/ravirraj/inkRush/server/internal/domain/room"
+	randomid "github.com/ravirraj/inkRush/server/internal/pkg/RandomID"
 	"github.com/ravirraj/inkRush/server/internal/store/memory"
 	"github.com/ravirraj/inkRush/server/internal/transport/websoc/protocol"
 )
 
 type WebSocketHandler struct {
 	sessionStore *memory.SessionStore
+	roomStore    *memory.RoomStore
 }
 type EchoMessage struct {
 	Message string `json:"message"`
@@ -31,6 +34,7 @@ func NewWebSocketHandler() *WebSocketHandler {
 
 	return &WebSocketHandler{
 		sessionStore: memory.NewSessionStore(),
+		roomStore:    memory.NewRoomStore(),
 	}
 }
 
@@ -112,6 +116,62 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			SendEnvelope(conn, protocol.EventSessionReady, sessionReadyPayload)
 
+		case protocol.EventRoomCreate:
+
+			var roomInitPayload protocol.RoomCreatePayload
+			players := []string{}
+
+			err := json.Unmarshal(envelope.PayLoad, &roomInitPayload)
+			if err != nil {
+				fmt.Println("Error ", err)
+				continue
+			}
+
+			if roomInitPayload.PlayerID == "" {
+				errPayload := protocol.ErrorPayload{
+					ErrorMessage: "Player ID is required",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				continue
+			}
+
+			playerPresentInSession, exists := h.sessionStore.GetByID(roomInitPayload.PlayerID)
+			if exists == false {
+				errPayload := protocol.ErrorPayload{
+					ErrorMessage: "Player is Not Present In The Session",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				continue
+			}
+
+			var code string
+
+			for {
+				code = randomid.GenerateID(6)
+
+				_, exists = h.roomStore.GetByCode(code)
+				if exists == false {
+					break
+				}
+
+			}
+			playerPresentInSession.CurrentRoomCode = code
+			players = append(players, playerPresentInSession.Id)
+			room := room.Room{
+				Code:         code,
+				HostPlayerID: playerPresentInSession.Id,
+				Players:      players,
+			}
+
+			h.roomStore.Add(&room)
+
+			roomReadyPayload := protocol.RoomReadyPayload{
+				Code:         code,
+				HostPlayerID: playerPresentInSession.CurrentRoomCode,
+				Players:      room.Players,
+			}
+
+			SendEnvelope(conn, protocol.EventRoomReady, roomReadyPayload)
 		default:
 			errPaylaod := protocol.ErrorPayload{
 				ErrorMessage: "Unkonwn Error",

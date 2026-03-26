@@ -1,7 +1,7 @@
 package room
 
 type Room struct {
-	RoomCode     string
+	Code     string
 	HostPlayerID string
 	Players      []string
 }
