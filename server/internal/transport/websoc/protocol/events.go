@@ -7,4 +7,6 @@ const (
 	EventSystemError  = "system:error"
 	EventSessionInit  = "session:init"
 	EventSessionReady = "session:ready"
+	EventRoomCreate   = "room:create"
+	EventRoomReady    = "room:ready"
 )
