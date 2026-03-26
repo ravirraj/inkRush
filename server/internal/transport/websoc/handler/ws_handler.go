@@ -113,12 +113,11 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			SendEnvelope(conn, protocol.EventSessionReady, sessionReadyPayload)
 
 		default:
-			var payload struct {
-				Message string
+			errPaylaod := protocol.ErrorPayload{
+				ErrorMessage: "Unkonwn Error",
 			}
-			payload.Message = "System Error"
 
-			SendEnvelope(conn, protocol.EventSystemError, payload)
+			SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
 		}
 
 	}
