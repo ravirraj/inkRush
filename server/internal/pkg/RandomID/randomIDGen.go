@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYSTUVWXYZ123467890"
 
 func GenerateID(length int) string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))

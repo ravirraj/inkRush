@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -167,8 +168,91 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			roomReadyPayload := protocol.RoomReadyPayload{
 				Code:         code,
-				HostPlayerID: playerPresentInSession.CurrentRoomCode,
+				HostPlayerID: playerPresentInSession.Id,
 				Players:      room.Players,
+			}
+
+			SendEnvelope(conn, protocol.EventRoomReady, roomReadyPayload)
+
+		case protocol.EventRoomJoin:
+			var RoomJoinPayload protocol.RoomJoinPayload
+			err := json.Unmarshal(envelope.PayLoad, &RoomJoinPayload)
+			if err != nil {
+				fmt.Println("Error ", err)
+				continue
+
+			}
+
+			if (RoomJoinPayload.Code == "") || (RoomJoinPayload.PlayerID == "") {
+				fmt.Println("Room Code or player id  is not provided")
+				errPaylaod := protocol.ErrorPayload{
+					ErrorMessage: "room code and playerid is required",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+				continue
+			}
+
+			currentRoom, exists := h.roomStore.GetByCode(RoomJoinPayload.Code)
+			if exists == false {
+				fmt.Println("Room Does not exists Check the code ")
+				errPaylaod := protocol.ErrorPayload{
+					ErrorMessage: "room code is invalid or room does not exist",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+				continue
+			}
+
+			currentPlayer, exists := h.sessionStore.GetByID(RoomJoinPayload.PlayerID)
+			if exists == false {
+				fmt.Println("Player does not exist in the session store")
+				errPaylaod := protocol.ErrorPayload{
+					ErrorMessage: "player id is not valid or player does not eixts in the session store",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+				continue
+			}
+
+			if currentPlayer.CurrentRoomCode != "" {
+				fmt.Println("playerID already exists in other room ")
+				errPaylaod := protocol.ErrorPayload{
+					ErrorMessage: "Player is Already Present In other room",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+				continue
+
+			}
+			// for _, playerId := range currentRoom.Players {
+			// 	if currentPlayer.Id == playerId {
+			// 		fmt.Println("playerID already exists in room ")
+			// 		errPaylaod := protocol.ErrorPayload{
+			// 			ErrorMessage: "Player is Already Present In room",
+			// 		}
+			// 		SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+			// 		break
+			// 	}
+			// }
+
+			// playersID := currentRoom.Players
+
+			contains := slices.Contains(currentRoom.Players, currentPlayer.Id)
+			if contains {
+
+				fmt.Println("playerID already exists in room ")
+				errPaylaod := protocol.ErrorPayload{
+					ErrorMessage: "Player is Already Present In room",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
+				continue
+
+			}
+
+			currentPlayer.CurrentRoomCode = RoomJoinPayload.Code
+			currentRoom.Players = append(currentRoom.Players, RoomJoinPayload.PlayerID)
+
+			roomReadyPayload := protocol.RoomReadyPayload{
+				Code:         currentRoom.Code,
+				HostPlayerID: currentRoom.HostPlayerID,
+				Players:      currentRoom.Players,
 			}
 
 			SendEnvelope(conn, protocol.EventRoomReady, roomReadyPayload)

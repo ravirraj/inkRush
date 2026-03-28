@@ -9,4 +9,5 @@ const (
 	EventSessionReady = "session:ready"
 	EventRoomCreate   = "room:create"
 	EventRoomReady    = "room:ready"
+	EventRoomJoin     = "room:join"
 )
