@@ -253,13 +253,12 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			currentPlayer.CurrentRoomCode = RoomJoinPayload.Code
 			currentRoom.Players = append(currentRoom.Players, RoomJoinPayload.PlayerID)
 
-			roomReadyPayload := protocol.RoomReadyPayload{
-				Code:         currentRoom.Code,
-				HostPlayerID: currentRoom.HostPlayerID,
-				Players:      currentRoom.Players,
-			}
-
-			SendEnvelope(conn, protocol.EventRoomReady, roomReadyPayload)
+			// roomReadyPayload := protocol.RoomReadyPayload{
+			// 	Code:         currentRoom.Code,
+			// 	HostPlayerID: currentRoom.HostPlayerID,
+			// 	Players:      currentRoom.Players,
+			// }
+			h.BoardcastRoomReady(*currentRoom)
 		default:
 			errPaylaod := protocol.ErrorPayload{
 				ErrorMessage: "Unkonwn Error",
