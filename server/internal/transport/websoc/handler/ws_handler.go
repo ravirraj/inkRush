@@ -20,6 +20,7 @@ import (
 type WebSocketHandler struct {
 	sessionStore *memory.SessionStore
 	roomStore    *memory.RoomStore
+	connStore    *memory.ConnStore
 }
 type EchoMessage struct {
 	Message string `json:"message"`
@@ -36,6 +37,7 @@ func NewWebSocketHandler() *WebSocketHandler {
 	return &WebSocketHandler{
 		sessionStore: memory.NewSessionStore(),
 		roomStore:    memory.NewRoomStore(),
+		connStore:    memory.NewConnectionStore(),
 	}
 }
 
@@ -114,6 +116,8 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			}
 
 			h.sessionStore.Add(&player)
+
+			h.connStore.Add(player.Id, conn)
 
 			SendEnvelope(conn, protocol.EventSessionReady, sessionReadyPayload)
 
@@ -289,4 +293,21 @@ func SendEnvelope(conn *websocket.Conn, messageType string, payload any) error {
 	}
 
 	return nil
+}
+
+func (h *WebSocketHandler) BoardcastRoomReady(currentRoom room.Room) {
+	RoomReadyPayload := protocol.RoomReadyPayload{
+		Code:         currentRoom.Code,
+		HostPlayerID: currentRoom.HostPlayerID,
+		Players:      currentRoom.Players,
+	}
+
+	for _, playerId := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if exists == false {
+			continue
+		}
+
+		SendEnvelope(conn, protocol.EventRoomReady, RoomReadyPayload)
+	}
 }
