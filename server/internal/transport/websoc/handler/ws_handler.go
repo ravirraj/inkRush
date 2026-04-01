@@ -42,6 +42,8 @@ func NewWebSocketHandler() *WebSocketHandler {
 }
 
 func (h *WebSocketHandler) Handle(c *gin.Context) {
+	var currentPlayerId string
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		fmt.Println(err)
@@ -54,7 +56,9 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			fmt.Println("Error ", err)
+			fmt.Println("Error disconnect", err)
+			h.handleDisconnet(currentPlayerId)
+			fmt.Println(currentPlayerId, "connection closed")
 			break
 		}
 
@@ -115,6 +119,8 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				PlayerID: player.Id,
 			}
 
+			currentPlayerId = player.Id
+			fmt.Println("curretn player in sesssion inti ", currentPlayerId)
 			h.sessionStore.Add(&player)
 
 			h.connStore.Add(player.Id, conn)
@@ -179,6 +185,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			SendEnvelope(conn, protocol.EventRoomReady, roomReadyPayload)
 
 		case protocol.EventRoomJoin:
+			fmt.Println("current player", currentPlayerId)
 			var RoomJoinPayload protocol.RoomJoinPayload
 			err := json.Unmarshal(envelope.PayLoad, &RoomJoinPayload)
 			if err != nil {
@@ -258,7 +265,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			// 	HostPlayerID: currentRoom.HostPlayerID,
 			// 	Players:      currentRoom.Players,
 			// }
-			h.BoardcastRoomReady(*currentRoom)
+			h.BoardcastRoomReady(currentRoom)
 		default:
 			errPaylaod := protocol.ErrorPayload{
 				ErrorMessage: "Unkonwn Error",
@@ -294,7 +301,7 @@ func SendEnvelope(conn *websocket.Conn, messageType string, payload any) error {
 	return nil
 }
 
-func (h *WebSocketHandler) BoardcastRoomReady(currentRoom room.Room) {
+func (h *WebSocketHandler) BoardcastRoomReady(currentRoom *room.Room) {
 	RoomReadyPayload := protocol.RoomReadyPayload{
 		Code:         currentRoom.Code,
 		HostPlayerID: currentRoom.HostPlayerID,
@@ -309,4 +316,47 @@ func (h *WebSocketHandler) BoardcastRoomReady(currentRoom room.Room) {
 
 		SendEnvelope(conn, protocol.EventRoomReady, RoomReadyPayload)
 	}
+}
+
+func (h *WebSocketHandler) handleDisconnet(playerId string) {
+
+	player, exists := h.sessionStore.GetByID(playerId)
+	if exists == false {
+		h.connStore.Remove(playerId)
+		return
+	}
+	h.connStore.Remove(playerId)
+
+	if player.CurrentRoomCode == "" {
+		h.sessionStore.Remove(playerId)
+		return
+	}
+	currentRoom, exists := h.roomStore.GetByCode(player.CurrentRoomCode)
+	if exists == false {
+		h.sessionStore.Remove(playerId)
+		return
+	}
+
+	players := []string{}
+
+	for _, playerId := range currentRoom.Players {
+		if playerId != player.Id {
+			players = append(players, playerId)
+		}
+	}
+	currentRoom.Players = players
+
+	if len(currentRoom.Players) == 0 {
+		h.roomStore.Remove(currentRoom.Code)
+		h.sessionStore.Remove(playerId)
+		return
+	}
+
+	if currentRoom.HostPlayerID == playerId {
+		currentRoom.HostPlayerID = currentRoom.Players[0]
+	}
+
+	h.BoardcastRoomReady(currentRoom)
+
+	h.sessionStore.Remove(playerId)
 }

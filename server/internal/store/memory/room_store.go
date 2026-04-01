@@ -31,3 +31,9 @@ func (r *RoomStore) GetByCode(roomCode string) (*room.Room, bool) {
 	return value, exists
 
 }
+
+func (r *RoomStore) Remove(roomId string) {
+	r.mu.Lock()
+	delete(r.rooms, roomId)
+	r.mu.Unlock()
+}

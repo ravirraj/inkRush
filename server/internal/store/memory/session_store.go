@@ -42,3 +42,9 @@ func (s *SessionStore) GetByID(playerId string) (*player.Player, bool) {
 	s.mu.Unlock()
 	return player, exists
 }
+
+func (s *SessionStore) Remove(playerId string) {
+	s.mu.Lock()
+	delete(s.players, playerId)
+	s.mu.Unlock()
+}
