@@ -176,10 +176,23 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			h.roomStore.Add(&room)
 
+			roomPlayerPayload := []protocol.RoomPlayerPayload{}
+
+			for _, player := range room.Players {
+				player, exists := h.sessionStore.GetByID(player)
+				if exists == false {
+					continue
+				}
+				roomPlayerPayload = append(roomPlayerPayload, protocol.RoomPlayerPayload{
+					PlayerId: player.Id,
+					Nickname: player.Nickname,
+				})
+			}
+
 			roomReadyPayload := protocol.RoomReadyPayload{
 				Code:         code,
 				HostPlayerID: playerPresentInSession.Id,
-				Players:      room.Players,
+				Players:      roomPlayerPayload,
 			}
 
 			SendEnvelope(conn, protocol.EventRoomReady, roomReadyPayload)
@@ -302,14 +315,31 @@ func SendEnvelope(conn *websocket.Conn, messageType string, payload any) error {
 }
 
 func (h *WebSocketHandler) BoardcastRoomReady(currentRoom *room.Room) {
+
+	// roomPlayerPaylaod := protocol.RoomPlayerPayload{}
+	players := []protocol.RoomPlayerPayload{}
+	for _, player := range currentRoom.Players {
+
+		currentPlayer, exists := h.sessionStore.GetByID(player)
+
+		if exists == false {
+			continue
+		}
+
+		players = append(players, protocol.RoomPlayerPayload{
+			PlayerId: currentPlayer.Id,
+			Nickname: currentPlayer.Nickname,
+		})
+
+	}
 	RoomReadyPayload := protocol.RoomReadyPayload{
 		Code:         currentRoom.Code,
 		HostPlayerID: currentRoom.HostPlayerID,
-		Players:      currentRoom.Players,
+		Players:      players,
 	}
 
-	for _, playerId := range currentRoom.Players {
-		conn, exists := h.connStore.GetByPlayerID(playerId)
+	for _, player := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(player)
 		if exists == false {
 			continue
 		}

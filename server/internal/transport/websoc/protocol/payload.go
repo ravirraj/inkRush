@@ -18,12 +18,18 @@ type RoomCreatePayload struct {
 }
 
 type RoomReadyPayload struct {
-	Code         string   `json:"code"`
-	HostPlayerID string   `json:"hostPlayerID"`
-	Players      []string `json:"players"`
+	Code         string              `json:"code"`
+	HostPlayerID string              `json:"hostPlayerID"`
+	Players      []RoomPlayerPayload `json:"players"`
 }
 
 type RoomJoinPayload struct {
 	Code     string `json:"code"`
 	PlayerID string `json:"playerID"`
+}
+
+type RoomPlayerPayload struct {
+	Nickname string `json:"nickname"`
+
+	PlayerId string `json:"playerId"`
 }

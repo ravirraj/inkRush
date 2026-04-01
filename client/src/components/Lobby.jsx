@@ -5,14 +5,13 @@ function Lobby({ room }) {
 
   return (
     <>
+      console.log(room)
       <h3>ROOM CODE {room.code}</h3>
       <h3>HOST PLAYER ID {room.hostPlayerID}</h3>
       <ul>
-        <li>
-          {room.players.map((player) => (
-            <li key={player}> Player : {player}</li>
-          ))}
-        </li>
+        {room.players.map((player) => (
+          <li key={player.playerId}>{player.nickname}</li>
+        ))}
       </ul>
     </>
   );
