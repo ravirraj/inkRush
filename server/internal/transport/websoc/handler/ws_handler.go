@@ -353,10 +353,20 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				continue
 			}
 
+			scoreMap := make(map[string]int)
+
+			for _, player := range roomInStore.Players {
+				scoreMap[player] = 0
+			}
 			roomInStore.Game = &game.GameStruct{
 				Status:                room.In_Progress,
 				CurrentRound:          1,
+				DrawerIndex:           0,
 				CurrentDrawerPlayerId: roomInStore.Players[0],
+				CurrentWord:           "",
+				GussedPlayerIds:       []string{},
+				MaxRound:              3,
+				Scores:                scoreMap,
 			}
 
 			h.BoardcastRoomReady(roomInStore)
