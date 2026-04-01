@@ -15,6 +15,7 @@ function App() {
   }, [code]);
   const [room, setRoom] = useState(null);
   const [game, setGame] = useState(null);
+  // const [turn, setTurn] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
 
@@ -75,6 +76,11 @@ function App() {
           console.log("Game has started:", msg.payload);
           setGame(msg.payload);
           break;
+        
+          case "turn:started":
+            console.log("Turn has started:", msg.payload);
+            setGame(msg.payload);
+            break;
 
         default:
           console.log("Unknown message type:", msg.type);

@@ -12,4 +12,5 @@ const (
 	EventRoomJoin     = "room:join"
 	EventGameStart    = "game:start"
 	EventGameStarted  = "game:started"
+	EventTurnStared   = "turn:started"
 )

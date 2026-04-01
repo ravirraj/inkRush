@@ -40,6 +40,16 @@ type GameStartPayload struct {
 
 type GameStartedPayload struct {
 	RoomCode              string `json:"code"`
-	CurrentRound          int64 `json:"currentRound"`
+	CurrentRound          int    `json:"currentRound"`
 	CurrentDrawerPlayerId string `json:"currentDrawerPlayerId"`
+}
+
+type TurnStaredPayload struct {
+	RoomCode string `json:"code"`
+
+	CurrentRound          int    `json:"currentRound"`
+	CurrentDrawerPlayerId string `json:"currentDrawerPlayerId"`
+
+	Word       string `json:"word"`
+	MaskedWord string `json:"maskedWord"`
 }

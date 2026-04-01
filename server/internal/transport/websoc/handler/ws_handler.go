@@ -14,6 +14,7 @@ import (
 	"github.com/ravirraj/inkRush/server/internal/domain/player"
 	"github.com/ravirraj/inkRush/server/internal/domain/room"
 	randomid "github.com/ravirraj/inkRush/server/internal/pkg/RandomID"
+	"github.com/ravirraj/inkRush/server/internal/pkg/words"
 	"github.com/ravirraj/inkRush/server/internal/store/memory"
 	"github.com/ravirraj/inkRush/server/internal/transport/websoc/protocol"
 )
@@ -355,6 +356,8 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			scoreMap := make(map[string]int)
 
+			pickedWord := words.GetRandomWord()
+
 			for _, player := range roomInStore.Players {
 				scoreMap[player] = 0
 			}
@@ -363,13 +366,14 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				CurrentRound:          1,
 				DrawerIndex:           0,
 				CurrentDrawerPlayerId: roomInStore.Players[0],
-				CurrentWord:           "",
+				CurrentWord:           pickedWord,
 				GussedPlayerIds:       []string{},
 				MaxRound:              3,
 				Scores:                scoreMap,
 			}
 
-			h.BoardcastRoomReady(roomInStore)
+			h.BoardcastGameReady(roomInStore)
+			h.BoardcastTurnStared(roomInStore)
 
 		default:
 			errPaylaod := protocol.ErrorPayload{
@@ -497,5 +501,31 @@ func (h *WebSocketHandler) BoardcastGameReady(currentRoom *room.Room) {
 		}
 
 		SendEnvelope(conn, protocol.EventGameStarted, GameStartedPayload)
+	}
+}
+
+func (h *WebSocketHandler) BoardcastTurnStared(currentRoom *room.Room) {
+	maskedWord := words.GetMaskedWord(currentRoom.Game.CurrentWord)
+
+	for _, playerId := range currentRoom.Players {
+		TurnStaredPayload := protocol.TurnStaredPayload{
+			RoomCode:              currentRoom.Code,
+			CurrentRound:          currentRoom.Game.CurrentRound,
+			CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+		}
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if exists == false {
+			continue
+		}
+		if playerId == currentRoom.Game.CurrentDrawerPlayerId {
+
+			TurnStaredPayload.Word = currentRoom.Game.CurrentWord
+			TurnStaredPayload.MaskedWord = maskedWord
+
+		} else {
+			TurnStaredPayload.Word = ""
+			TurnStaredPayload.MaskedWord = maskedWord
+		}
+		SendEnvelope(conn, protocol.EventTurnStared, TurnStaredPayload)
 	}
 }
