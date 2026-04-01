@@ -1,6 +1,7 @@
 import React from "react";
 
 function HomeScreen({ payload }) {
+  console.log("apttytr",payload)
   return (
     <>
       <div>HomeScreen</div>
@@ -16,7 +17,7 @@ function HomeScreen({ payload }) {
         value={payload.code}
         onChange={(e) => payload.setCode(e.target.value)}
       />
-      {console.log(payload.code)}
+      {/* {console.log(payload.players[0])} */}
       <br />
       <br />
       <button onClick={payload.onCreateRoom}>Create Room</button>

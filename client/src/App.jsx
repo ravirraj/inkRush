@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import HomeScreen from "./components/HomeScreen";
 import Lobby from "./components/Lobby";
+import GameScreen from "./components/GameScreen";
 
 function App() {
   const [nickname, setNickname] = useState("");
@@ -13,6 +14,7 @@ function App() {
     codeRef.current = code;
   }, [code]);
   const [room, setRoom] = useState(null);
+  const [game, setGame] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
 
@@ -68,6 +70,12 @@ function App() {
           console.log("Room is ready:", msg.payload);
           pendingAction.current = null;
           break;
+
+        case "game:started":
+          console.log("Game has started:", msg.payload);
+          setGame(msg.payload);
+          break;
+
         default:
           console.log("Unknown message type:", msg.type);
       }
@@ -126,12 +134,24 @@ function App() {
       }),
     );
   }
+  function onStartGame() {
+    console.log("gamr sretfdfedfefgrfsgfdf");
+    wsRef.current.send(
+      JSON.stringify({
+        type: "game:start",
+        payload: { playerId: playerID },
+      }),
+    );
+  }
   return (
     <>
       <h1>Hello </h1>
 
       {room ? (
-        <Lobby room={room} />
+        <>
+          <Lobby room={room} />
+          <GameScreen payload={{ game, onStartGame }} />
+        </>
       ) : (
         <HomeScreen
           payload={{

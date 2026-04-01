@@ -33,3 +33,13 @@ type RoomPlayerPayload struct {
 
 	PlayerId string `json:"playerId"`
 }
+
+type GameStartPayload struct {
+	PlayerId string `json:"playerId"`
+}
+
+type GameStartedPayload struct {
+	RoomCode              string `json:"code"`
+	CurrentRound          int64 `json:"currentRound"`
+	CurrentDrawerPlayerId string `json:"currentDrawerPlayerId"`
+}

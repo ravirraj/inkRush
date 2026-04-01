@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ravirraj/inkRush/server/internal/domain/game"
 	"github.com/ravirraj/inkRush/server/internal/domain/player"
 	"github.com/ravirraj/inkRush/server/internal/domain/room"
 	randomid "github.com/ravirraj/inkRush/server/internal/pkg/RandomID"
@@ -172,6 +173,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				Code:         code,
 				HostPlayerID: playerPresentInSession.Id,
 				Players:      players,
+				Game:         &game.GameStruct{Status: room.Wating},
 			}
 
 			h.roomStore.Add(&room)
@@ -279,6 +281,86 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			// 	Players:      currentRoom.Players,
 			// }
 			h.BoardcastRoomReady(currentRoom)
+		case protocol.EventGameStart:
+
+			var GameStartPayload protocol.GameStartPayload
+
+			err := json.Unmarshal(envelope.PayLoad, &GameStartPayload)
+			if err != nil {
+				fmt.Println("Error in EventGameStart", err)
+				continue
+
+			}
+
+			if GameStartPayload.PlayerId == "" {
+				fmt.Println("EventGameStart,Player Id is Required")
+				errpaylaod := protocol.ErrorPayload{
+					ErrorMessage: "Player Id is required",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errpaylaod)
+				continue
+			}
+
+			playerInStore, exists := h.sessionStore.GetByID(GameStartPayload.PlayerId)
+			if exists == false {
+				fmt.Println("|EventGameStart,Player Do No exist in session store")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is not in session",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+
+			}
+
+			if playerInStore.CurrentRoomCode == "" {
+				fmt.Println("EventGameStart,Player is not in any room")
+
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player Is not in any room",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+
+			}
+
+			roomInStore, exists := h.roomStore.GetByCode(playerInStore.CurrentRoomCode)
+			if exists == false {
+				fmt.Println("EventGameStart,Room does not exists")
+
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Room does not exists ",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+			if roomInStore.HostPlayerID != playerInStore.Id {
+				fmt.Println("EventGameStart, Player is not the host")
+
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is not host",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			if roomInStore.Game.Status != room.Wating {
+				fmt.Println("Game stared ")
+
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Game already started",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			roomInStore.Game = &game.GameStruct{
+				Status:                room.In_Progress,
+				CurrentRound:          1,
+				CurrentDrawerPlayerId: roomInStore.Players[0],
+			}
+
+			h.BoardcastRoomReady(roomInStore)
+
 		default:
 			errPaylaod := protocol.ErrorPayload{
 				ErrorMessage: "Unkonwn Error",
@@ -389,4 +471,21 @@ func (h *WebSocketHandler) handleDisconnet(playerId string) {
 	h.BoardcastRoomReady(currentRoom)
 
 	h.sessionStore.Remove(playerId)
+}
+
+func (h *WebSocketHandler) BoardcastGameReady(currentRoom *room.Room) {
+
+	GameStartedPayload := protocol.GameStartedPayload{
+		RoomCode:              currentRoom.Code,
+		CurrentRound:          currentRoom.Game.CurrentRound,
+		CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+	}
+	for _, player := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(player)
+		if exists == false {
+			continue
+		}
+
+		SendEnvelope(conn, protocol.EventGameStarted, GameStartedPayload)
+	}
 }
