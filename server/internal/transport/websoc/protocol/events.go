@@ -13,4 +13,6 @@ const (
 	EventGameStart    = "game:start"
 	EventGameStarted  = "game:started"
 	EventTurnStared   = "turn:started"
+	EventGuessSubmit  = "guess:submit"
+	EventGuessResult  = "guess:result"
 )

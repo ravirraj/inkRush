@@ -15,9 +15,11 @@ function App() {
   }, [code]);
   const [room, setRoom] = useState(null);
   const [game, setGame] = useState(null);
+  const [error, setError] = useState(null);
   // const [turn, setTurn] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
+  const [guess, setGuess] = useState("");
 
   useEffect(() => {
     let ws = new WebSocket("ws://localhost:8080/ws");
@@ -76,11 +78,21 @@ function App() {
           console.log("Game has started:", msg.payload);
           setGame(msg.payload);
           break;
+
+        case "turn:started":
+          console.log("Turn has started:", msg.payload);
+          setGame(msg.payload);
+          break;
+
+        case "system:error":
+          console.log("Error from server:", msg.payload);
+          setError(msg.payload.ErrorMessage);
+          break;
         
-          case "turn:started":
-            console.log("Turn has started:", msg.payload);
-            setGame(msg.payload);
-            break;
+        case "guess:result":
+          console.log("Guess result:", msg.payload);
+          setGame(msg.payload);
+          break;
 
         default:
           console.log("Unknown message type:", msg.type);
@@ -89,9 +101,9 @@ function App() {
     ws.onclose = () => {
       console.log("WebSocket connection closed");
     };
-    ws.onerror = () => {
+    ws.onerror = (e) => {
       console.log("WebSocket error");
-    };
+      setError("WebSocket error occurred");s};
 
     return () => {
       ws.close();
@@ -149,6 +161,17 @@ function App() {
       }),
     );
   }
+
+  function onSubmitGuess() {
+    console.log("Submitting guess:", guess);
+    wsRef.current.send(
+      JSON.stringify({
+        type: "guess:submit",
+        payload: { playerId: playerID, guess: guess },
+      }),
+    );
+    setGuess("");
+  }
   return (
     <>
       <h1>Hello </h1>
@@ -156,7 +179,7 @@ function App() {
       {room ? (
         <>
           <Lobby room={room} />
-          <GameScreen payload={{ game, onStartGame }} />
+          <GameScreen payload={{ game, onStartGame, guess, setGuess, onSubmitGuess   }} />
         </>
       ) : (
         <HomeScreen
@@ -170,6 +193,8 @@ function App() {
           }}
         />
       )}
+
+      {error && <p style={{ color: "red" }}>{error}</p>}
     </>
   );
 }

@@ -1,5 +1,7 @@
 package game
 
+import "time"
+
 type GameStruct struct {
 	Status                string
 	CurrentRound          int
@@ -9,4 +11,8 @@ type GameStruct struct {
 	CurrentWord           string
 	GussedPlayerIds       []string
 	Scores                map[string]int
+	TurnDurationSecond    int
+	TurnStartAt time.Time
+	TurnEndsAt time.Time
+
 }

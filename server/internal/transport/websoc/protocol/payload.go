@@ -53,3 +53,17 @@ type TurnStaredPayload struct {
 	Word       string `json:"word"`
 	MaskedWord string `json:"maskedWord"`
 }
+
+type GuessSubmitPayload struct {
+	PlayerId string `json:"playerId"`
+	Guess    string `josn:"guess"`
+}
+
+type GuessResultPayload struct {
+	PlayerId           string `json:"playerId"`
+	IsCorrect          bool   `json:"isCorrect"`
+	Nickname           string `json:"nickname"`
+	PointAwareded      int
+	DrawerPointAwarded int
+	Scores             map[string]int
+}

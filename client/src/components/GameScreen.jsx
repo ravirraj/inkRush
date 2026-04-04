@@ -12,6 +12,8 @@ function GameScreen({ payload }) {
       <p>{game ? game.currentDrawerPlayerId : 0} : Drawer</p>
       <p>{game && (game.word ? game.word : game.maskedWord)}</p>
       <button onClick={onStartGame}>Start Game</button>
+      <input type="text" placeholder="Submit Guess" value={payload.guess} onChange={(e) => payload.setGuess(e.target.value)} />
+      <button onClick={payload.onSubmitGuess}>Submit Guess</button>
     </>
   );
 }

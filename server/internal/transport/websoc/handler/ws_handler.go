@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -358,6 +359,9 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			pickedWord := words.GetRandomWord()
 
+			now := time.Now()
+			turnDuration := 80
+
 			for _, player := range roomInStore.Players {
 				scoreMap[player] = 0
 			}
@@ -370,10 +374,153 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				GussedPlayerIds:       []string{},
 				MaxRound:              3,
 				Scores:                scoreMap,
+				TurnDurationSecond:    turnDuration,
+				TurnStartAt:           now,
+				TurnEndsAt:            now.Add(time.Duration(turnDuration) * time.Second),
 			}
 
 			h.BoardcastGameReady(roomInStore)
 			h.BoardcastTurnStared(roomInStore)
+
+		case protocol.EventGuessSubmit:
+			var GuessSubmitPayload protocol.GuessSubmitPayload
+
+			err := json.Unmarshal(envelope.PayLoad, &GuessSubmitPayload)
+			if err != nil {
+				fmt.Println("ERR", err)
+			}
+			if GuessSubmitPayload.Guess == "" {
+				fmt.Println("Guess is required  !!!")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Guess is required",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			if GuessSubmitPayload.PlayerId == "" {
+				fmt.Println("PlayerId is required  !!!")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "PlayerId is required",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			currentPlayer, exists := h.sessionStore.GetByID(GuessSubmitPayload.PlayerId)
+			if exists == false {
+
+				fmt.Println(" Player is not in session")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is not in session",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			if currentPlayer.CurrentRoomCode == "" {
+				fmt.Println("Player is not in room")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is not in room",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			currentRoom, exists := h.roomStore.GetByCode(currentPlayer.CurrentRoomCode)
+
+			if exists == false {
+
+				fmt.Println("Room Does Not Exists")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Room Does Not Exists",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+
+			}
+
+			if currentRoom.Game.Status == room.Wating {
+				fmt.Println("Room Status is Wating ")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Room status Is Waiting",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+			if currentRoom.Game.CurrentDrawerPlayerId == GuessSubmitPayload.PlayerId {
+				fmt.Println("Player is Drawer")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is Drawer",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			hasGuessed := slices.Contains(currentRoom.Game.GussedPlayerIds, GuessSubmitPayload.PlayerId)
+			if hasGuessed {
+				fmt.Println("Player Already Guessed The Answer")
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player Already Guessed Answer",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			word := strings.ToLower(currentRoom.Game.CurrentWord)
+			word = strings.ReplaceAll(word, " ", "")
+
+			useGuessedWord := strings.ToLower(GuessSubmitPayload.Guess)
+			useGuessedWord = strings.ReplaceAll(useGuessedWord, " ", "")
+
+			if time.Now().After(currentRoom.Game.TurnEndsAt) {
+				fmt.Println("Round Expired")
+				errPayload := protocol.ErrorPayload{
+					ErrorMessage: "Round Expired",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				continue
+			}
+
+			maxPt := 100
+			minPt := 20
+
+			remaining := time.Until(currentRoom.Game.TurnEndsAt)
+			total := time.Duration(currentRoom.Game.TurnDurationSecond) * time.Second
+
+			ratio := float64(remaining) / float64(total)
+
+			if ratio < 0 {
+				ratio = 0
+			}
+			if ratio > 1 {
+				ratio = 1
+			}
+
+			points := minPt + int(float64(maxPt-minPt)*ratio)
+			fmt.Println(points)
+
+			GuessResultPayload := protocol.GuessResultPayload{
+				PlayerId:           currentPlayer.Id,
+				IsCorrect:          false,
+				Nickname:           currentPlayer.Nickname,
+				PointAwareded:      0,
+				DrawerPointAwarded: 0,
+				Scores:             currentRoom.Game.Scores,
+			}
+			if word != useGuessedWord {
+				h.BoardcastGuessResult(currentRoom, GuessResultPayload)
+
+			} else {
+				currentRoom.Game.GussedPlayerIds = append(currentRoom.Game.GussedPlayerIds, currentPlayer.Id)
+				currentRoom.Game.Scores[currentPlayer.Id] += points
+				currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId] += 20
+				GuessResultPayload.PointAwareded = points
+				GuessResultPayload.DrawerPointAwarded = currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId]
+
+				GuessResultPayload.IsCorrect = true
+				h.BoardcastGuessResult(currentRoom, GuessResultPayload)
+			}
 
 		default:
 			errPaylaod := protocol.ErrorPayload{
@@ -527,5 +674,16 @@ func (h *WebSocketHandler) BoardcastTurnStared(currentRoom *room.Room) {
 			TurnStaredPayload.MaskedWord = maskedWord
 		}
 		SendEnvelope(conn, protocol.EventTurnStared, TurnStaredPayload)
+	}
+}
+
+func (h *WebSocketHandler) BoardcastGuessResult(currentRomm *room.Room, payload protocol.GuessResultPayload) {
+	for _, playerId := range currentRomm.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if exists == false {
+			continue
+		}
+
+		SendEnvelope(conn, protocol.EventGuessResult, payload)
 	}
 }
