@@ -382,6 +382,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			h.BoardcastGameReady(roomInStore)
 			h.BoardcastTurnStared(roomInStore)
+			h.ShaduleTurnTimeOut(roomInStore, roomInStore.Game.TurnNumber)
 
 		case protocol.EventGuessSubmit:
 			var GuessSubmitPayload protocol.GuessSubmitPayload
@@ -693,6 +694,19 @@ func (h *WebSocketHandler) BoardcastGuessResult(currentRomm *room.Room, payload 
 	}
 }
 
+func (h *WebSocketHandler) BoardcastGameEnded(currentRoom *room.Room) {
+	for _, playerId := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if exists == false {
+			continue
+		}
+		gameEndedPayload := protocol.GameEndedPayload{
+			Score: currentRoom.Game.Scores,
+		}
+		SendEnvelope(conn, protocol.EventGameEnded, gameEndedPayload)
+	}
+}
+
 func (h *WebSocketHandler) AdvanceTurn(currentRoom *room.Room) {
 
 	currentIndex := currentRoom.Game.DrawerIndex
@@ -728,17 +742,33 @@ func (h *WebSocketHandler) AdvanceTurn(currentRoom *room.Room) {
 	currentRoom.Game.TurnNumber++
 
 	h.BoardcastTurnStared(currentRoom)
+	h.ShaduleTurnTimeOut(currentRoom, currentRoom.Game.TurnNumber)
 }
 
-func (h *WebSocketHandler) BoardcastGameEnded(currentRoom *room.Room) {
-	for _, playerId := range currentRoom.Players {
-		conn, exists := h.connStore.GetByPlayerID(playerId)
-		if exists == false {
-			continue
-		}
-		gameEndedPayload := protocol.GameEndedPayload{
-			Score: currentRoom.Game.Scores,
-		}
-		SendEnvelope(conn, protocol.EventGameEnded, gameEndedPayload)
+func (h *WebSocketHandler) ShaduleTurnTimeOut(currentRoom *room.Room, turnNumber int) {
+
+	waitDuration := time.Until(currentRoom.Game.TurnEndsAt)
+	if waitDuration <= 0 {
+		// h.AdvanceTurn(currentRoom)
+		return
 	}
+	go func() {
+		time.Sleep(waitDuration)
+		if currentRoom.Game == nil {
+
+			return
+
+		}
+
+		if currentRoom.Game.Status == room.Wating {
+			return
+		}
+
+		if currentRoom.Game.TurnNumber != turnNumber {
+			return
+		}
+
+		h.AdvanceTurn(currentRoom)
+	}()
+
 }
