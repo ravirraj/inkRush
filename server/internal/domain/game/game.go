@@ -12,7 +12,7 @@ type GameStruct struct {
 	GussedPlayerIds       []string
 	Scores                map[string]int
 	TurnDurationSecond    int
-	TurnStartAt time.Time
-	TurnEndsAt time.Time
-
+	TurnStartAt           time.Time
+	TurnEndsAt            time.Time
+	TurnNumber            int
 }

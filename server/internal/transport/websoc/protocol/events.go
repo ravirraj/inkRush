@@ -15,4 +15,5 @@ const (
 	EventTurnStared   = "turn:started"
 	EventGuessSubmit  = "guess:submit"
 	EventGuessResult  = "guess:result"
+	EventGameEnded = "game:ended"
 )

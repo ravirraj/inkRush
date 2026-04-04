@@ -377,6 +377,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				TurnDurationSecond:    turnDuration,
 				TurnStartAt:           now,
 				TurnEndsAt:            now.Add(time.Duration(turnDuration) * time.Second),
+				TurnNumber:            1,
 			}
 
 			h.BoardcastGameReady(roomInStore)
@@ -520,6 +521,10 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 				GuessResultPayload.IsCorrect = true
 				h.BoardcastGuessResult(currentRoom, GuessResultPayload)
+			}
+
+			if len(currentRoom.Game.GussedPlayerIds) == len(currentRoom.Players)-1 {
+				h.AdvanceTurn(currentRoom)
 			}
 
 		default:
@@ -685,5 +690,55 @@ func (h *WebSocketHandler) BoardcastGuessResult(currentRomm *room.Room, payload 
 		}
 
 		SendEnvelope(conn, protocol.EventGuessResult, payload)
+	}
+}
+
+func (h *WebSocketHandler) AdvanceTurn(currentRoom *room.Room) {
+
+	currentIndex := currentRoom.Game.DrawerIndex
+	nextIndex := (currentIndex + 1) % len(currentRoom.Players)
+
+	currentRoom.Game.DrawerIndex = nextIndex
+	currentRoom.Game.CurrentDrawerPlayerId = currentRoom.Players[nextIndex]
+
+	if nextIndex == 0 {
+		currentRoom.Game.CurrentRound++
+
+	}
+	if currentRoom.Game.CurrentRound > currentRoom.Game.MaxRound {
+
+		h.BoardcastGameEnded(currentRoom)
+		return
+
+	}
+
+	currentRoom.Game.GussedPlayerIds = []string{}
+	pickedWord := words.GetRandomWord()
+	// maskedWord := words.GetMaskedWord(pickedWord)
+	currentRoom.Game.CurrentWord = pickedWord
+
+	turnDuration := 80
+	now := time.Now()
+
+	currentRoom.Game.TurnDurationSecond = turnDuration
+	currentRoom.Game.TurnStartAt = now
+
+	currentRoom.Game.TurnEndsAt = now.Add(time.Duration(turnDuration) * time.Second)
+
+	currentRoom.Game.TurnNumber++
+
+	h.BoardcastTurnStared(currentRoom)
+}
+
+func (h *WebSocketHandler) BoardcastGameEnded(currentRoom *room.Room) {
+	for _, playerId := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if exists == false {
+			continue
+		}
+		gameEndedPayload := protocol.GameEndedPayload{
+			Score: currentRoom.Game.Scores,
+		}
+		SendEnvelope(conn, protocol.EventGameEnded, gameEndedPayload)
 	}
 }

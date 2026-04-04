@@ -60,10 +60,14 @@ type GuessSubmitPayload struct {
 }
 
 type GuessResultPayload struct {
-	PlayerId           string `json:"playerId"`
-	IsCorrect          bool   `json:"isCorrect"`
-	Nickname           string `json:"nickname"`
-	PointAwareded      int
-	DrawerPointAwarded int
-	Scores             map[string]int
+	PlayerId           string         `json:"playerId"`
+	IsCorrect          bool           `json:"isCorrect"`
+	Nickname           string         `json:"nickname"`
+	PointAwareded      int            `json:"pointsAwarded"`
+	DrawerPointAwarded int            `json:"drawerPoints"`
+	Scores             map[string]int `json:"score"`
+}
+
+type GameEndedPayload struct {
+	Score map[string]int `json:"score"`
 }
