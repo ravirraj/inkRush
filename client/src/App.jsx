@@ -88,12 +88,16 @@ function App() {
           console.log("Error from server:", msg.payload);
           setError(msg.payload.ErrorMessage);
           break;
-        
+
         case "guess:result":
           console.log("Guess result:", msg.payload);
           setGame(msg.payload);
           break;
 
+        case "game:ended":
+          console.log("Game has ended:", msg.payload);
+          // setGame(msg.payload);
+          break;
         default:
           console.log("Unknown message type:", msg.type);
       }
@@ -103,7 +107,9 @@ function App() {
     };
     ws.onerror = (e) => {
       console.log("WebSocket error");
-      setError("WebSocket error occurred");s};
+      setError("WebSocket error occurred");
+      s;
+    };
 
     return () => {
       ws.close();
@@ -179,7 +185,9 @@ function App() {
       {room ? (
         <>
           <Lobby room={room} />
-          <GameScreen payload={{ game, onStartGame, guess, setGuess, onSubmitGuess   }} />
+          <GameScreen
+            payload={{ game, onStartGame, guess, setGuess, onSubmitGuess }}
+          />
         </>
       ) : (
         <HomeScreen
