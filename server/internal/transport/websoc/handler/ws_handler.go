@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"slices"
 	"sort"
@@ -347,6 +348,16 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				continue
 			}
 
+			if len(roomInStore.Players) < 3 {
+				fmt.Println("EventGameStart, Need at least 3 players to start")
+
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Need at least 3 players to start the game",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
 			if roomInStore.Game.Status != room.Wating {
 				fmt.Println("Game stared ")
 
@@ -356,6 +367,11 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				SendEnvelope(conn, protocol.EventSystemError, errMessage)
 				continue
 			}
+
+			// Randomize drawer order by shuffling the players list
+			rand.Shuffle(len(roomInStore.Players), func(i, j int) {
+				roomInStore.Players[i], roomInStore.Players[j] = roomInStore.Players[j], roomInStore.Players[i]
+			})
 
 			scoreMap := make(map[string]int)
 
@@ -595,13 +611,20 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				GuessResultPayload.DrawerPointAwarded = currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId]
 
 				GuessResultPayload.IsCorrect = true
-				h.BoardcastGuessResult(currentRoom, GuessResultPayload)
-				h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
-					PlayerId: "system",
-					Nickname: "System",
-					Message:  fmt.Sprintf("%s guessed the word!", currentPlayer.Nickname),
-					Type:     "correct",
-				})
+				for _, pid := range currentRoom.Players {
+					if pid == currentPlayer.Id || pid == currentRoom.Game.CurrentDrawerPlayerId {
+						conn, exists := h.connStore.GetByPlayerID(pid)
+						if exists {
+							SendEnvelope(conn, protocol.EventGuessResult, GuessResultPayload)
+							SendEnvelope(conn, protocol.EventChatMessage, protocol.ChatMessagePayload{
+								PlayerId: "system",
+								Nickname: "System",
+								Message:  fmt.Sprintf("%s guessed the word!", currentPlayer.Nickname),
+								Type:     "correct",
+							})
+						}
+					}
+				}
 			}
 
 			if len(currentRoom.Game.GussedPlayerIds) == len(currentRoom.Players)-1 {
@@ -1078,6 +1101,9 @@ func (h *WebSocketHandler) BoardcastGameEnded(currentRoom *room.Room) {
 }
 
 func (h *WebSocketHandler) AdvanceTurn(currentRoom *room.Room) {
+	if len(currentRoom.Players) == 0 {
+		return
+	}
 
 	currentIndex := currentRoom.Game.DrawerIndex
 	nextIndex := (currentIndex + 1) % len(currentRoom.Players)
@@ -1215,6 +1241,9 @@ func (h *WebSocketHandler) ShaduleTurnTimeOut(currentRoom *room.Room, turnNumber
 }
 
 func (h *WebSocketHandler) EndDrawingTurn(currentRoom *room.Room) {
+	if len(currentRoom.Players) == 0 {
+		return
+	}
 	currentRoom.Game.Status = "turn_transition"
 
 	// Resolve next drawer name

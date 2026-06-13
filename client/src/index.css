@@ -1,0 +1,267 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+:root {
+  --neon-blue: #0080ff;
+  --hot-pink: #ff006e;
+  --cyan: #00ffff;
+  --deep-black: #0b0b16;
+  --surface-purple: #1a1a2e;
+  --metallic-silver: #c0c0c0;
+  --gold: #ffd700;
+  --80s-pink: #ff10f0;
+  --error-red: #ef4444;
+  --font-mono: 'Share Tech Mono', monospace;
+  
+  --shadow-blue: 0 0 10px rgba(0, 128, 255, 0.4), 0 0 20px rgba(0, 128, 255, 0.2);
+  --shadow-pink: 0 0 10px rgba(255, 0, 110, 0.4), 0 0 20px rgba(255, 0, 110, 0.2);
+  --shadow-cyan: 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
+}
+
+/* Base resets & typography (DESIGN.md Section 10) */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: var(--deep-black);
+  color: var(--metallic-silver);
+  line-height: 1.6;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* CRT Scanline Overlay & Screen curve effects (DESIGN.md Section 3 & 6) */
+body::after {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 9999;
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+}
+
+/* Global Container (DESIGN.md Section 12) */
+.app-terminal {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Glitch Heading (DESIGN.md Section 3) */
+.glitch-logo {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  color: var(--hot-pink);
+  text-shadow: var(--shadow-pink);
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: -1px;
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+  position: relative;
+  animation: flicker 3s infinite alternate;
+}
+
+/* Card layout wrapper (DESIGN.md Section 11) */
+.retro-card {
+  background-color: var(--surface-purple);
+  border: 1.5px solid var(--neon-blue);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-blue);
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.retro-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, var(--hot-pink), var(--cyan));
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+}
+
+/* Heading Typography */
+h2, h3, h4, h5 {
+  font-family: var(--font-mono);
+  color: var(--cyan);
+  text-shadow: var(--shadow-cyan);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 1.8rem;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+  padding-bottom: 0.5rem;
+}
+
+h3 {
+  font-size: 1.4rem;
+}
+
+/* Forms & Inputs (DESIGN.md Section 11) */
+.form-group {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--cyan);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05rem;
+}
+
+.retro-input {
+  background-color: rgba(11, 11, 22, 0.8);
+  border: 1.5px solid var(--neon-blue);
+  border-radius: 0.25rem;
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  padding: 0.75rem;
+  outline: none;
+  transition: all 0.2s ease-out;
+}
+
+.retro-input:focus {
+  border-color: var(--hot-pink);
+  box-shadow: var(--shadow-pink);
+}
+
+.retro-input::placeholder {
+  color: rgba(192, 192, 192, 0.4);
+}
+
+/* Button variants (DESIGN.md Section 11) */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s ease-out;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background-color: var(--hot-pink);
+  border: 1.5px solid var(--hot-pink);
+  color: var(--deep-black);
+  box-shadow: var(--shadow-pink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #e0005d;
+  border-color: #e0005d;
+  box-shadow: 0 0 15px rgba(255, 0, 110, 0.6);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1.5px solid var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--shadow-cyan);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: rgba(0, 255, 255, 0.1);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-success {
+  background-color: #4caf50;
+  border: 1.5px solid #4caf50;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.4);
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #43a047;
+  border-color: #43a047;
+}
+
+.btn-success:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Global warning/error alerts */
+.error-alert {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1.5px solid var(--error-red);
+  color: #ff8b8b;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-top: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+}
+
+/* Custom Scrollbar for terminal vibe */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--deep-black);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-purple);
+  border: 1.5px solid var(--neon-blue);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neon-blue);
+}
+
+/* Keyframe animations */
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+    opacity: 0.99;
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+    opacity: 0.4;
+  }
+}

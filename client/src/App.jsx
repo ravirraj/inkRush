@@ -22,6 +22,7 @@ function App() {
   const [wordOptions, setWordOptions] = useState([]);
   const [turnSummary, setTurnSummary] = useState(null);
   const [gameSummary, setGameSummary] = useState(null);
+  const [hasGuessedCorrectly, setHasGuessedCorrectly] = useState(false);
   // const [turn, setTurn] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
@@ -80,6 +81,7 @@ function App() {
           setWordOptions([]);
           setTurnSummary(null);
           setGameSummary(null);
+          setHasGuessedCorrectly(false);
           console.log("Room is ready:", msg.payload);
           pendingAction.current = null;
           break;
@@ -88,6 +90,7 @@ function App() {
           console.log("Game has started:", msg.payload);
           setGame(msg.payload);
           setGameSummary(null);
+          setHasGuessedCorrectly(false);
           break;
 
         case "turn:started":
@@ -96,6 +99,7 @@ function App() {
           setWordOptions([]);
           setTurnSummary(null);
           setGameSummary(null);
+          setHasGuessedCorrectly(false);
           break;
 
         case "word:options":
@@ -104,6 +108,7 @@ function App() {
           setWordOptions(msg.payload.words || []);
           setTurnSummary(null);
           setGameSummary(null);
+          setHasGuessedCorrectly(false);
           break;
 
         case "word:selecting":
@@ -111,6 +116,7 @@ function App() {
           setGame(msg.payload);
           setTurnSummary(null);
           setGameSummary(null);
+          setHasGuessedCorrectly(false);
           break;
 
         case "system:error":
@@ -120,6 +126,9 @@ function App() {
 
         case "guess:result":
           console.log("Guess result:", msg.payload);
+          if (msg.payload.playerId === playerID && msg.payload.isCorrect) {
+            setHasGuessedCorrectly(true);
+          }
           setGame((prevGame) => {
             if (!prevGame) return null;
             return {
@@ -251,16 +260,18 @@ function App() {
     setGuess("");
   }
   return (
-    <>
-      <h1>Hello </h1>
+    <div className="app-terminal">
+      <header className="glitch-logo">
+        inkRush
+      </header>
 
       {room ? (
-        <>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           <Lobby room={room} />
           <GameScreen
-            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary, gameSummary }}
+            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary, gameSummary, hasGuessedCorrectly }}
           />
-        </>
+        </div>
       ) : (
         <HomeScreen
           payload={{
@@ -274,8 +285,8 @@ function App() {
         />
       )}
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
-    </>
+      {error && <div className="error-alert">WARNING: {error}</div>}
+    </div>
   );
 }
 
