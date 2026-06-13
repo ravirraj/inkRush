@@ -88,3 +88,10 @@ type DrawClearPayload struct {
 	PlayerId string `json:"playerId"`
 }
 
+type ChatMessagePayload struct {
+	PlayerId string `json:"playerId"`
+	Nickname string `json:"nickname"`
+	Message  string `json:"message"`
+	Type     string `json:"type"`
+}
+

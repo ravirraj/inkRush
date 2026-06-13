@@ -277,12 +277,13 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			currentPlayer.CurrentRoomCode = RoomJoinPayload.Code
 			currentRoom.Players = append(currentRoom.Players, RoomJoinPayload.PlayerID)
 
-			// roomReadyPayload := protocol.RoomReadyPayload{
-			// 	Code:         currentRoom.Code,
-			// 	HostPlayerID: currentRoom.HostPlayerID,
-			// 	Players:      currentRoom.Players,
-			// }
 			h.BoardcastRoomReady(currentRoom)
+			h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+				PlayerId: "system",
+				Nickname: "System",
+				Message:  fmt.Sprintf("%s joined the lobby", currentPlayer.Nickname),
+				Type:     "join",
+			})
 		case protocol.EventGameStart:
 
 			var GameStartPayload protocol.GameStartPayload
@@ -512,6 +513,12 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			}
 			if word != useGuessedWord {
 				h.BoardcastGuessResult(currentRoom, GuessResultPayload)
+				h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+					PlayerId: currentPlayer.Id,
+					Nickname: currentPlayer.Nickname,
+					Message:  GuessSubmitPayload.Guess,
+					Type:     "chat",
+				})
 
 			} else {
 				currentRoom.Game.GussedPlayerIds = append(currentRoom.Game.GussedPlayerIds, currentPlayer.Id)
@@ -522,6 +529,12 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 				GuessResultPayload.IsCorrect = true
 				h.BoardcastGuessResult(currentRoom, GuessResultPayload)
+				h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+					PlayerId: "system",
+					Nickname: "System",
+					Message:  fmt.Sprintf("%s guessed the word!", currentPlayer.Nickname),
+					Type:     "correct",
+				})
 			}
 
 			if len(currentRoom.Game.GussedPlayerIds) == len(currentRoom.Players)-1 {
@@ -632,6 +645,57 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				SendEnvelope(conn, protocol.EventDrawClear, drawClearPayload)
 			}
 
+		case protocol.EventChatMessage:
+			var chatPayload protocol.ChatMessagePayload
+			err := json.Unmarshal(envelope.PayLoad, &chatPayload)
+			if err != nil {
+				fmt.Println("ERR in EventChatMessage unmarshal:", err)
+				continue
+			}
+
+			if chatPayload.PlayerId == "" {
+				fmt.Println("EventChatMessage: Player ID is required")
+				continue
+			}
+
+			currentPlayer, exists := h.sessionStore.GetByID(chatPayload.PlayerId)
+			if !exists {
+				fmt.Println("EventChatMessage: Player does not exist in session store")
+				continue
+			}
+
+			if currentPlayer.CurrentRoomCode == "" {
+				fmt.Println("EventChatMessage: Player is not in any room")
+				continue
+			}
+
+			currentRoom, exists := h.roomStore.GetByCode(currentPlayer.CurrentRoomCode)
+			if !exists {
+				fmt.Println("EventChatMessage: Room does not exist")
+				continue
+			}
+
+			if strings.TrimSpace(chatPayload.Message) == "" {
+				continue
+			}
+
+			// Validate drawer chat constraints
+			if currentRoom.Game != nil && currentRoom.Game.Status == room.In_Progress {
+				if currentRoom.Game.CurrentDrawerPlayerId == chatPayload.PlayerId {
+					fmt.Println("EventChatMessage: Drawer is blocked from chatting during turn")
+					errPayload := protocol.ErrorPayload{
+						ErrorMessage: "Drawer cannot chat during their drawing turn!",
+					}
+					SendEnvelope(conn, protocol.EventSystemError, errPayload)
+					continue
+				}
+			}
+
+			// Broadcast message to room
+			chatPayload.Nickname = currentPlayer.Nickname
+			chatPayload.Type = "chat"
+			h.BroadcastChatMessage(currentRoom, chatPayload)
+
 		default:
 			errPaylaod := protocol.ErrorPayload{
 				ErrorMessage: "Unkonwn Error",
@@ -740,6 +804,12 @@ func (h *WebSocketHandler) handleDisconnet(playerId string) {
 	}
 
 	h.BoardcastRoomReady(currentRoom)
+	h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+		PlayerId: "system",
+		Nickname: "System",
+		Message:  fmt.Sprintf("%s left the lobby", player.Nickname),
+		Type:     "leave",
+	})
 
 	h.sessionStore.Remove(playerId)
 }
@@ -760,6 +830,13 @@ func (h *WebSocketHandler) BoardcastGameReady(currentRoom *room.Room) {
 
 		SendEnvelope(conn, protocol.EventGameStarted, GameStartedPayload)
 	}
+
+	h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+		PlayerId: "system",
+		Nickname: "System",
+		Message:  "Game has started!",
+		Type:     "system",
+	})
 }
 
 func (h *WebSocketHandler) BoardcastTurnStared(currentRoom *room.Room) {
@@ -787,6 +864,18 @@ func (h *WebSocketHandler) BoardcastTurnStared(currentRoom *room.Room) {
 		}
 		SendEnvelope(conn, protocol.EventTurnStared, TurnStaredPayload)
 	}
+
+	drawer, exists := h.sessionStore.GetByID(currentRoom.Game.CurrentDrawerPlayerId)
+	drawerNickname := "Someone"
+	if exists {
+		drawerNickname = drawer.Nickname
+	}
+	h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+		PlayerId: "system",
+		Nickname: "System",
+		Message:  fmt.Sprintf("%s is drawing now!", drawerNickname),
+		Type:     "system",
+	})
 }
 
 func (h *WebSocketHandler) BoardcastGuessResult(currentRomm *room.Room, payload protocol.GuessResultPayload) {
@@ -811,6 +900,13 @@ func (h *WebSocketHandler) BoardcastGameEnded(currentRoom *room.Room) {
 		}
 		SendEnvelope(conn, protocol.EventGameEnded, gameEndedPayload)
 	}
+
+	h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+		PlayerId: "system",
+		Nickname: "System",
+		Message:  "Game has ended! Final scores are ready.",
+		Type:     "system",
+	})
 }
 
 func (h *WebSocketHandler) AdvanceTurn(currentRoom *room.Room) {
@@ -877,4 +973,14 @@ func (h *WebSocketHandler) ShaduleTurnTimeOut(currentRoom *room.Room, turnNumber
 		h.AdvanceTurn(currentRoom)
 	}()
 
+}
+
+func (h *WebSocketHandler) BroadcastChatMessage(currentRoom *room.Room, payload protocol.ChatMessagePayload) {
+	for _, playerId := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if !exists {
+			continue
+		}
+		SendEnvelope(conn, protocol.EventChatMessage, payload)
+	}
 }

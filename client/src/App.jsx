@@ -18,6 +18,7 @@ function App() {
   const [room, setRoom] = useState(null);
   const [game, setGame] = useState(null);
   const [error, setError] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
   // const [turn, setTurn] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
@@ -72,6 +73,7 @@ function App() {
           break;
         case "room:ready":
           setRoom(msg.payload);
+          setChatMessages([]);
           console.log("Room is ready:", msg.payload);
           pendingAction.current = null;
           break;
@@ -93,7 +95,13 @@ function App() {
 
         case "guess:result":
           console.log("Guess result:", msg.payload);
-          setGame(msg.payload);
+          setGame((prevGame) => {
+            if (!prevGame) return null;
+            return {
+              ...prevGame,
+              scores: msg.payload.score,
+            };
+          });
           break;
 
         case "game:ended":
@@ -111,6 +119,11 @@ function App() {
           if (onDrawClearRef.current) {
             onDrawClearRef.current(msg.payload);
           }
+          break;
+
+        case "chat:message":
+          console.log("Chat message received:", msg.payload);
+          setChatMessages((prev) => [...prev, msg.payload]);
           break;
         default:
           console.log("Unknown message type:", msg.type);
@@ -200,7 +213,7 @@ function App() {
         <>
           <Lobby room={room} />
           <GameScreen
-            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID }}
+            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages }}
           />
         </>
       ) : (

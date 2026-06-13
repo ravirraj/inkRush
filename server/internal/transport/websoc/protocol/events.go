@@ -18,5 +18,6 @@ const (
 	EventGameEnded = "game:ended"
 	EventDrawStroke   = "draw:stroke"
 	EventDrawClear    = "draw:clear"
+	EventChatMessage  = "chat:message"
 )
 

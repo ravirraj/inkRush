@@ -9,15 +9,26 @@ function GameScreen({ payload }) {
     onDrawClearRef,
     wsRef,
     playerID,
+    chatMessages,
   } = payload;
 
   const canvasRef = useRef(null);
+  const chatEndRef = useRef(null);
+
   const [isDrawing, setIsDrawing] = useState(false);
   const [prevCoord, setPrevCoord] = useState(null);
+  const [chatInput, setChatInput] = useState("");
 
   const isDrawer = game && game.currentDrawerPlayerId === playerID;
   const isHost = room && room.hostPlayerID === playerID;
   const gameStatus = game && game.status ? game.status : "wating";
+
+  // Auto-scroll chat to the bottom
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages]);
 
   // Clear canvas on new turn
   useEffect(() => {
@@ -165,6 +176,24 @@ function GameScreen({ payload }) {
     }
   };
 
+  const handleSendChat = (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    if (wsRef && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "chat:message",
+          payload: {
+            playerId: playerID,
+            message: chatInput,
+          },
+        }),
+      );
+    }
+    setChatInput("");
+  };
+
   return (
     <div>
       <h3>Game Screen</h3>
@@ -177,31 +206,111 @@ function GameScreen({ payload }) {
         <button onClick={onStartGame}>Start Game</button>
       )}
 
-      <div style={{ margin: "15px 0" }}>
-        <canvas
-          ref={canvasRef}
-          width={600}
-          height={400}
+      <div style={{ display: "flex", gap: "20px", marginTop: "15px" }}>
+        {/* Canvas panel */}
+        <div>
+          <canvas
+            ref={canvasRef}
+            width={600}
+            height={400}
+            style={{
+              border: "2px solid #333",
+              backgroundColor: "#fff",
+              cursor: isDrawer ? "crosshair" : "not-allowed",
+              display: "block",
+              touchAction: "none",
+            }}
+            onMouseDown={handleStartDraw}
+            onMouseMove={handleDraw}
+            onMouseUp={handleEndDraw}
+            onMouseLeave={handleEndDraw}
+            onTouchStart={handleStartDraw}
+            onTouchMove={handleDraw}
+            onTouchEnd={handleEndDraw}
+          />
+          {isDrawer && (
+            <button onClick={handleClearCanvas} style={{ marginTop: "10px" }}>
+              Clear Canvas
+            </button>
+          )}
+        </div>
+
+        {/* Chat Feed & Input panel */}
+        <div
           style={{
+            display: "flex",
+            flexDirection: "column",
+            width: "300px",
+            height: "400px",
             border: "2px solid #333",
-            backgroundColor: "#fff",
-            cursor: isDrawer ? "crosshair" : "not-allowed",
-            display: "block",
-            touchAction: "none",
           }}
-          onMouseDown={handleStartDraw}
-          onMouseMove={handleDraw}
-          onMouseUp={handleEndDraw}
-          onMouseLeave={handleEndDraw}
-          onTouchStart={handleStartDraw}
-          onTouchMove={handleDraw}
-          onTouchEnd={handleEndDraw}
-        />
-        {isDrawer && (
-          <button onClick={handleClearCanvas} style={{ marginTop: "10px" }}>
-            Clear Canvas
-          </button>
-        )}
+        >
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "10px",
+              backgroundColor: "#fafafa",
+              fontFamily: "sans-serif",
+              fontSize: "14px",
+            }}
+          >
+            {chatMessages &&
+              chatMessages.map((msg, index) => {
+                let style = { margin: "6px 0", wordBreak: "break-word" };
+                if (msg.type === "system") {
+                  style.color = "blue";
+                  style.fontWeight = "bold";
+                } else if (msg.type === "correct") {
+                  style.color = "green";
+                  style.fontWeight = "bold";
+                } else if (msg.type === "join" || msg.type === "leave") {
+                  style.color = "gray";
+                  style.fontStyle = "italic";
+                }
+                return (
+                  <div key={index} style={style}>
+                    {msg.type === "chat" ? (
+                      <>
+                        <strong>{msg.nickname}:</strong> {msg.message}
+                      </>
+                    ) : (
+                      msg.message
+                    )}
+                  </div>
+                );
+              })}
+            <div ref={chatEndRef} />
+          </div>
+
+          <form
+            onSubmit={handleSendChat}
+            style={{ display: "flex", borderTop: "2px solid #333" }}
+          >
+            <input
+              type="text"
+              placeholder={
+                isDrawer ? "Drawer cannot chat..." : "Type chat message..."
+              }
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              disabled={isDrawer}
+              style={{
+                flex: 1,
+                padding: "8px",
+                border: "none",
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={isDrawer}
+              style={{ padding: "8px", cursor: "pointer" }}
+            >
+              Send
+            </button>
+          </form>
+        </div>
       </div>
 
       <div style={{ marginTop: "15px" }}>
