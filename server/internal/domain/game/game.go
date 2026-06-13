@@ -17,4 +17,5 @@ type GameStruct struct {
 	TurnNumber            int
 	CurrentWordOptions    []string
 	TurnPoints            map[string]int
+	HintRevealedPositions []bool // tracks which char positions have been hinted
 }

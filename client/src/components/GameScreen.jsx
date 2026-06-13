@@ -47,9 +47,35 @@ function GameScreen({ payload }) {
     return game.maskedWord || "";
   })();
 
-  // Number of letters in the word from the masked form (e.g. "_ _ _ _ _" → 5)
+  // Format the backend masked word string ("_,p,_," format) into readable display ("_ P _ _")
+  // Each char is stored as "X," in the masked string; spaces are literal spaces.
+  const formatMaskedWord = (raw) => {
+    if (!raw) return "";
+    // Split on commas but keep spaces as-is
+    // Backend format: "_," or "a," per letter, " " for space
+    return raw
+      .split("")
+      .reduce((acc, ch, i, arr) => {
+        if (ch === ",") return acc; // skip delimiter
+        if (ch === " ") return acc + "   "; // word separator
+        return acc + ch.toUpperCase() + " ";
+      }, "")
+      .trimEnd();
+  };
+
+  const formattedDisplayWord = (() => {
+    if (!game) return "";
+    if (game.word) return game.word.toUpperCase();
+    if (hasGuessedCorrectly && revealedWord) return revealedWord.toUpperCase();
+    return formatMaskedWord(game.maskedWord);
+  })();
+
+  // Number of hidden letters (count underscores) and already revealed letters (non-underscore, non-space)
   const letterCount = game?.maskedWord
     ? (game.maskedWord.match(/_/g) || []).length
+    : 0;
+  const revealedLetterCount = game?.maskedWord
+    ? (game.maskedWord.match(/[a-zA-Z]/g) || []).length
     : 0;
 
   const transitionDuration = turnSummary?.duration || 8;
@@ -375,14 +401,34 @@ function GameScreen({ payload }) {
                   ? "Your Word"
                   : hasGuessedCorrectly
                     ? "✓ You Guessed It!"
-                    : `Guess the Word · ${letterCount} letters`}
+                    : revealedLetterCount > 0
+                      ? `Hint: ${letterCount + revealedLetterCount} letters · ${revealedLetterCount} revealed`
+                      : `Guess the Word · ${letterCount} letters`}
               </span>
               <div style={{
-                fontSize: "1.5rem", color: "var(--cyan)", textShadow: "var(--shadow-cyan)",
-                letterSpacing: "0.15rem", fontWeight: "bold", marginTop: "0.25rem"
+                fontSize: "1.4rem",
+                color: "var(--cyan)",
+                textShadow: "var(--shadow-cyan)",
+                letterSpacing: "0.25rem",
+                fontWeight: "bold",
+                marginTop: "0.25rem",
+                fontFamily: "var(--font-mono)",
+                transition: "all 0.3s ease",
               }}>
-                {displayedWord}
+                {formattedDisplayWord}
               </div>
+              {/* Hint flash: show a subtle "💡 Hint!" pill when a letter was just revealed */}
+              {!isDrawer && revealedLetterCount > 0 && !hasGuessedCorrectly && (
+                <div style={{
+                  fontSize: "0.72rem",
+                  color: "var(--hot-pink)",
+                  textShadow: "var(--shadow-pink)",
+                  marginTop: "0.2rem",
+                  animation: "flicker 1.5s ease-out"
+                }}>
+                  💡 Hint revealed!
+                </div>
+              )}
               {hasGuessedCorrectly && !isDrawer && (
                 <div style={{ fontSize: "0.75rem", color: "rgba(192,192,192,0.6)", marginTop: "0.15rem" }}>
                   Waiting for others...

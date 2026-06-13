@@ -1175,6 +1175,7 @@ func (h *WebSocketHandler) StartDrawingTurn(currentRoom *room.Room, word string)
 	currentRoom.Game.Status = room.In_Progress // which is "in_progress"
 	currentRoom.Game.CurrentWord = word
 	currentRoom.Game.TurnPoints = make(map[string]int)
+	currentRoom.Game.HintRevealedPositions = make([]bool, len([]rune(word))) // reset hints
 
 	now := time.Now()
 	turnDuration := 80
@@ -1184,6 +1185,7 @@ func (h *WebSocketHandler) StartDrawingTurn(currentRoom *room.Room, word string)
 
 	h.BoardcastTurnStared(currentRoom)
 	h.ShaduleTurnTimeOut(currentRoom, currentRoom.Game.TurnNumber)
+	h.ScheduleHintReveals(currentRoom, currentRoom.Game.TurnNumber)
 }
 
 func (h *WebSocketHandler) ShaduleWordSelectionTimeOut(currentRoom *room.Room, turnNumber int) {
@@ -1308,5 +1310,98 @@ func (h *WebSocketHandler) BroadcastChatMessage(currentRoom *room.Room, payload 
 			continue
 		}
 		SendEnvelope(conn, protocol.EventChatMessage, payload)
+	}
+}
+
+// ScheduleHintReveals fires three hint reveals at 20s, 40s and 60s into a drawing turn.
+// Each reveal exposes one additional random letter from the secret word to all guessers.
+func (h *WebSocketHandler) ScheduleHintReveals(currentRoom *room.Room, turnNumber int) {
+	hintDelays := []time.Duration{
+		20 * time.Second,
+		40 * time.Second,
+		60 * time.Second,
+	}
+	for _, delay := range hintDelays {
+		delay := delay // capture loop variable
+		go func() {
+			time.Sleep(delay)
+			// Guard: turn must still be in progress and be the same turn
+			if currentRoom.Game == nil {
+				return
+			}
+			if currentRoom.Game.Status != room.In_Progress {
+				return
+			}
+			if currentRoom.Game.TurnNumber != turnNumber {
+				return
+			}
+			h.BroadcastHint(currentRoom)
+		}()
+	}
+}
+
+// BroadcastHint picks one unrevealed letter position at random, marks it revealed,
+// rebuilds the masked word with the hint, and sends hint:reveal to all non-drawer players.
+// A maximum of 40% of the word's letter characters will ever be revealed.
+func (h *WebSocketHandler) BroadcastHint(currentRoom *room.Room) {
+	word := []rune(currentRoom.Game.CurrentWord)
+	revealed := currentRoom.Game.HintRevealedPositions
+	if len(revealed) != len(word) {
+		return
+	}
+
+	// Count total letter characters (exclude spaces) and how many are already revealed
+	totalLetters := 0
+	revealedCount := 0
+	for i, ch := range word {
+		if ch != ' ' {
+			totalLetters++
+			if revealed[i] {
+				revealedCount++
+			}
+		}
+	}
+
+	// Cap: reveal at most 40% of letters (minimum 1)
+	maxReveal := int(float64(totalLetters) * 0.4)
+	if maxReveal < 1 {
+		maxReveal = 1
+	}
+	if revealedCount >= maxReveal {
+		return
+	}
+
+	// Collect unrevealed non-space positions
+	candidates := []int{}
+	for i, ch := range word {
+		if ch != ' ' && !revealed[i] {
+			candidates = append(candidates, i)
+		}
+	}
+	if len(candidates) == 0 {
+		return
+	}
+
+	// Pick a random position to reveal
+	pick := candidates[rand.Intn(len(candidates))]
+	currentRoom.Game.HintRevealedPositions[pick] = true
+
+	// Build the partial masked word to send
+	hintMasked := words.BuildHintMaskedWord(currentRoom.Game.CurrentWord, currentRoom.Game.HintRevealedPositions)
+
+	payload := protocol.HintRevealPayload{
+		MaskedWord: hintMasked,
+	}
+
+	// Send only to non-drawer players (drawer already knows the word)
+	for _, playerId := range currentRoom.Players {
+		if playerId == currentRoom.Game.CurrentDrawerPlayerId {
+			continue
+		}
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if !exists {
+			continue
+		}
+		SendEnvelope(conn, protocol.EventHintReveal, payload)
 	}
 }

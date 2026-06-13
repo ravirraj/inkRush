@@ -31,6 +31,25 @@ func GetMaskedWord(word string) string {
 	return masked
 }
 
+// BuildHintMaskedWord rebuilds the masked word string with some positions revealed.
+// revealed is a bool slice indexed per rune of the word.
+// A revealed letter is shown as its lowercase character; hidden letters remain "_".
+// Spaces in the original word are always preserved as " ".
+func BuildHintMaskedWord(word string, revealed []bool) string {
+	runes := []rune(word)
+	result := ""
+	for i, ch := range runes {
+		if ch == ' ' {
+			result += " "
+		} else if i < len(revealed) && revealed[i] {
+			result += string(ch) + ","
+		} else {
+			result += "_,"
+		}
+	}
+	return result
+}
+
 func GetThreeRandomWords() []string {
 	n := len(easyDrawWords)
 	if n < 3 {

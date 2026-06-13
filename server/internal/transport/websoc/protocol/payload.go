@@ -134,3 +134,8 @@ type TurnEndedPayload struct {
 	Duration           int            `json:"duration"`
 }
 
+// HintRevealPayload is sent to all non-drawer players when the server reveals a hint letter.
+type HintRevealPayload struct {
+	MaskedWord string `json:"maskedWord"` // e.g. "_,p,_,_,l,e," — partially revealed
+}
+

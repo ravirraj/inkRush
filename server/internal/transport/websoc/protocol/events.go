@@ -24,5 +24,6 @@ const (
 	EventWordSelect    = "word:select"
 	EventTurnEnded     = "turn:ended"
 	EventGameReset     = "game:reset"
+	EventHintReveal    = "hint:reveal"
 )
 

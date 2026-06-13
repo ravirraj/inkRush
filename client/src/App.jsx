@@ -199,6 +199,16 @@ function App() {
             return next.length > 80 ? next.slice(next.length - 80) : next;
           });
           break;
+
+        case "hint:reveal":
+          // Server revealed a new letter — update maskedWord in game state
+          console.log("Hint revealed:", msg.payload.maskedWord);
+          setGame((prevGame) => {
+            if (!prevGame) return null;
+            return { ...prevGame, maskedWord: msg.payload.maskedWord };
+          });
+          break;
+
         default:
           console.log("Unknown message type:", msg.type);
       }
