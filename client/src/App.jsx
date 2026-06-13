@@ -35,7 +35,7 @@ function App() {
   const [revealedWord, setRevealedWord] = useState("");
 
   useEffect(() => {
-    let ws = new WebSocket("ws://localhost:8080/ws");
+    let ws = new WebSocket(import.meta.env.VITE_WS_URL);
 
     wsRef.current = ws;
 
