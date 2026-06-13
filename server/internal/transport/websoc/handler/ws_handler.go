@@ -358,32 +358,33 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			scoreMap := make(map[string]int)
 
-			pickedWord := words.GetRandomWord()
+			pickedWords := words.GetThreeRandomWords()
 
 			now := time.Now()
-			turnDuration := 80
+			selectionDuration := 15
 
 			for _, player := range roomInStore.Players {
 				scoreMap[player] = 0
 			}
 			roomInStore.Game = &game.GameStruct{
-				Status:                room.In_Progress,
+				Status:                "selecting_word",
 				CurrentRound:          1,
 				DrawerIndex:           0,
 				CurrentDrawerPlayerId: roomInStore.Players[0],
-				CurrentWord:           pickedWord,
+				CurrentWord:           "",
+				CurrentWordOptions:    pickedWords,
 				GussedPlayerIds:       []string{},
 				MaxRound:              3,
 				Scores:                scoreMap,
-				TurnDurationSecond:    turnDuration,
+				TurnDurationSecond:    selectionDuration,
 				TurnStartAt:           now,
-				TurnEndsAt:            now.Add(time.Duration(turnDuration) * time.Second),
+				TurnEndsAt:            now.Add(time.Duration(selectionDuration) * time.Second),
 				TurnNumber:            1,
 			}
 
 			h.BoardcastGameReady(roomInStore)
-			h.BoardcastTurnStared(roomInStore)
-			h.ShaduleTurnTimeOut(roomInStore, roomInStore.Game.TurnNumber)
+			h.BoardcastWordSelectionState(roomInStore)
+			h.ShaduleWordSelectionTimeOut(roomInStore, roomInStore.Game.TurnNumber)
 
 		case protocol.EventGuessSubmit:
 			var GuessSubmitPayload protocol.GuessSubmitPayload
@@ -443,10 +444,10 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 			}
 
-			if currentRoom.Game.Status == room.Wating {
-				fmt.Println("Room Status is Wating ")
+			if currentRoom.Game.Status != room.In_Progress {
+				fmt.Println("Room Status is not in_progress ")
 				errMessage := protocol.ErrorPayload{
-					ErrorMessage: "Room status Is Waiting",
+					ErrorMessage: "Game is not active (waiting or selecting word)",
 				}
 				SendEnvelope(conn, protocol.EventSystemError, errMessage)
 				continue
@@ -524,6 +525,13 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				currentRoom.Game.GussedPlayerIds = append(currentRoom.Game.GussedPlayerIds, currentPlayer.Id)
 				currentRoom.Game.Scores[currentPlayer.Id] += points
 				currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId] += 20
+				
+				if currentRoom.Game.TurnPoints == nil {
+					currentRoom.Game.TurnPoints = make(map[string]int)
+				}
+				currentRoom.Game.TurnPoints[currentPlayer.Id] += points
+				currentRoom.Game.TurnPoints[currentRoom.Game.CurrentDrawerPlayerId] += 20
+
 				GuessResultPayload.PointAwareded = points
 				GuessResultPayload.DrawerPointAwarded = currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId]
 
@@ -538,7 +546,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			}
 
 			if len(currentRoom.Game.GussedPlayerIds) == len(currentRoom.Players)-1 {
-				h.AdvanceTurn(currentRoom)
+				h.EndDrawingTurn(currentRoom)
 			}
 
 		case protocol.EventDrawStroke:
@@ -695,6 +703,68 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			chatPayload.Nickname = currentPlayer.Nickname
 			chatPayload.Type = "chat"
 			h.BroadcastChatMessage(currentRoom, chatPayload)
+
+		case protocol.EventWordSelect:
+			var selectPayload protocol.WordSelectPayload
+			err := json.Unmarshal(envelope.PayLoad, &selectPayload)
+			if err != nil {
+				fmt.Println("ERR in EventWordSelect unmarshal:", err)
+				continue
+			}
+
+			if selectPayload.PlayerId == "" || selectPayload.Word == "" {
+				fmt.Println("EventWordSelect: Player ID and Word are required")
+				continue
+			}
+
+			currentPlayer, exists := h.sessionStore.GetByID(selectPayload.PlayerId)
+			if !exists {
+				fmt.Println("EventWordSelect: Player does not exist in session store")
+				continue
+			}
+
+			if currentPlayer.CurrentRoomCode == "" {
+				fmt.Println("EventWordSelect: Player is not in any room")
+				continue
+			}
+
+			currentRoom, exists := h.roomStore.GetByCode(currentPlayer.CurrentRoomCode)
+			if !exists {
+				fmt.Println("EventWordSelect: Room does not exist")
+				continue
+			}
+
+			if currentRoom.Game == nil || currentRoom.Game.Status != "selecting_word" {
+				fmt.Println("EventWordSelect: Game is not in word selection phase")
+				continue
+			}
+
+			if currentRoom.Game.CurrentDrawerPlayerId != selectPayload.PlayerId {
+				fmt.Println("EventWordSelect: Sender is not the current drawer")
+				continue
+			}
+
+			// Validate chosen word
+			valid := false
+			chosenWord := ""
+			for _, option := range currentRoom.Game.CurrentWordOptions {
+				if strings.EqualFold(option, selectPayload.Word) {
+					valid = true
+					chosenWord = option
+					break
+				}
+			}
+
+			if !valid {
+				fmt.Println("EventWordSelect: Word is not in options list")
+				errPayload := protocol.ErrorPayload{
+					ErrorMessage: "Selected word is not in your available choices!",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				continue
+			}
+
+			h.StartDrawingTurn(currentRoom, chosenWord)
 
 		default:
 			errPaylaod := protocol.ErrorPayload{
@@ -928,30 +998,101 @@ func (h *WebSocketHandler) AdvanceTurn(currentRoom *room.Room) {
 
 	}
 
+	currentRoom.Game.TurnNumber++
+	h.StartWordSelectionPhase(currentRoom)
+}
+
+func (h *WebSocketHandler) StartWordSelectionPhase(currentRoom *room.Room) {
+	currentRoom.Game.Status = "selecting_word"
+	currentRoom.Game.CurrentWordOptions = words.GetThreeRandomWords()
+	currentRoom.Game.CurrentWord = ""
 	currentRoom.Game.GussedPlayerIds = []string{}
-	pickedWord := words.GetRandomWord()
-	// maskedWord := words.GetMaskedWord(pickedWord)
-	currentRoom.Game.CurrentWord = pickedWord
 
-	turnDuration := 80
 	now := time.Now()
+	selectionDuration := 15
+	currentRoom.Game.TurnDurationSecond = selectionDuration
+	currentRoom.Game.TurnStartAt = now
+	currentRoom.Game.TurnEndsAt = now.Add(time.Duration(selectionDuration) * time.Second)
 
+	h.BoardcastGameReady(currentRoom)
+	h.BoardcastWordSelectionState(currentRoom)
+	h.ShaduleWordSelectionTimeOut(currentRoom, currentRoom.Game.TurnNumber)
+}
+
+func (h *WebSocketHandler) BoardcastWordSelectionState(currentRoom *room.Room) {
+	for _, playerId := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if !exists {
+			continue
+		}
+		if playerId == currentRoom.Game.CurrentDrawerPlayerId {
+			payload := protocol.WordOptionsPayload{
+				RoomCode:              currentRoom.Code,
+				CurrentRound:          currentRoom.Game.CurrentRound,
+				CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+				Status:                currentRoom.Game.Status,
+				Words:                 currentRoom.Game.CurrentWordOptions,
+			}
+			SendEnvelope(conn, protocol.EventWordOptions, payload)
+		} else {
+			payload := protocol.WordSelectingPayload{
+				RoomCode:              currentRoom.Code,
+				CurrentRound:          currentRoom.Game.CurrentRound,
+				CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+				Status:                currentRoom.Game.Status,
+			}
+			SendEnvelope(conn, protocol.EventWordSelecting, payload)
+		}
+	}
+}
+
+func (h *WebSocketHandler) StartDrawingTurn(currentRoom *room.Room, word string) {
+	currentRoom.Game.Status = room.In_Progress // which is "in_progress"
+	currentRoom.Game.CurrentWord = word
+	currentRoom.Game.TurnPoints = make(map[string]int)
+
+	now := time.Now()
+	turnDuration := 80
 	currentRoom.Game.TurnDurationSecond = turnDuration
 	currentRoom.Game.TurnStartAt = now
-
 	currentRoom.Game.TurnEndsAt = now.Add(time.Duration(turnDuration) * time.Second)
-
-	currentRoom.Game.TurnNumber++
 
 	h.BoardcastTurnStared(currentRoom)
 	h.ShaduleTurnTimeOut(currentRoom, currentRoom.Game.TurnNumber)
+}
+
+func (h *WebSocketHandler) ShaduleWordSelectionTimeOut(currentRoom *room.Room, turnNumber int) {
+	waitDuration := time.Until(currentRoom.Game.TurnEndsAt)
+	if waitDuration <= 0 {
+		return
+	}
+	go func() {
+		time.Sleep(waitDuration)
+		if currentRoom.Game == nil {
+			return
+		}
+		if currentRoom.Game.Status != "selecting_word" {
+			return
+		}
+		if currentRoom.Game.TurnNumber != turnNumber {
+			return
+		}
+
+		fallbackWord := ""
+		if len(currentRoom.Game.CurrentWordOptions) > 0 {
+			fallbackWord = currentRoom.Game.CurrentWordOptions[0]
+		} else {
+			fallbackWord = words.GetRandomWord()
+		}
+
+		h.StartDrawingTurn(currentRoom, fallbackWord)
+	}()
 }
 
 func (h *WebSocketHandler) ShaduleTurnTimeOut(currentRoom *room.Room, turnNumber int) {
 
 	waitDuration := time.Until(currentRoom.Game.TurnEndsAt)
 	if waitDuration <= 0 {
-		// h.AdvanceTurn(currentRoom)
 		return
 	}
 	go func() {
@@ -970,9 +1111,66 @@ func (h *WebSocketHandler) ShaduleTurnTimeOut(currentRoom *room.Room, turnNumber
 			return
 		}
 
-		h.AdvanceTurn(currentRoom)
+		h.EndDrawingTurn(currentRoom)
 	}()
 
+}
+
+func (h *WebSocketHandler) EndDrawingTurn(currentRoom *room.Room) {
+	currentRoom.Game.Status = "turn_transition"
+
+	// Resolve next drawer name
+	currentIndex := currentRoom.Game.DrawerIndex
+	nextIndex := (currentIndex + 1) % len(currentRoom.Players)
+	nextDrawerNickname := "Someone"
+	if nextDrawer, exists := h.sessionStore.GetByID(currentRoom.Players[nextIndex]); exists {
+		nextDrawerNickname = nextDrawer.Nickname
+	}
+
+	// Reveal correct word in chat
+	h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+		PlayerId: "system",
+		Nickname: "System",
+		Message:  fmt.Sprintf("The word was: %s", currentRoom.Game.CurrentWord),
+		Type:     "system",
+	})
+
+	// Broadcast EventTurnEnded to all players in the room
+	payload := protocol.TurnEndedPayload{
+		RoomCode:           currentRoom.Code,
+		CorrectWord:        currentRoom.Game.CurrentWord,
+		GainedPoints:       currentRoom.Game.TurnPoints,
+		TotalScores:        currentRoom.Game.Scores,
+		NextDrawerNickname: nextDrawerNickname,
+		Duration:           8,
+	}
+
+	for _, playerId := range currentRoom.Players {
+		conn, exists := h.connStore.GetByPlayerID(playerId)
+		if !exists {
+			continue
+		}
+		SendEnvelope(conn, protocol.EventTurnEnded, payload)
+	}
+
+	// Schedule turn transition timeout
+	h.ShaduleTurnTransitionTimeOut(currentRoom, currentRoom.Game.TurnNumber)
+}
+
+func (h *WebSocketHandler) ShaduleTurnTransitionTimeOut(currentRoom *room.Room, turnNumber int) {
+	go func() {
+		time.Sleep(8 * time.Second)
+		if currentRoom.Game == nil {
+			return
+		}
+		if currentRoom.Game.Status != "turn_transition" {
+			return
+		}
+		if currentRoom.Game.TurnNumber != turnNumber {
+			return
+		}
+		h.AdvanceTurn(currentRoom)
+	}()
 }
 
 func (h *WebSocketHandler) BroadcastChatMessage(currentRoom *room.Room, payload protocol.ChatMessagePayload) {

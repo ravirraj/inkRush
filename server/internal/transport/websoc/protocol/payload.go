@@ -95,3 +95,32 @@ type ChatMessagePayload struct {
 	Type     string `json:"type"`
 }
 
+type WordOptionsPayload struct {
+	RoomCode              string   `json:"code"`
+	CurrentRound          int      `json:"currentRound"`
+	CurrentDrawerPlayerId string   `json:"currentDrawerPlayerId"`
+	Status                string   `json:"status"`
+	Words                 []string `json:"words"`
+}
+
+type WordSelectingPayload struct {
+	RoomCode              string `json:"code"`
+	CurrentRound          int    `json:"currentRound"`
+	CurrentDrawerPlayerId string `json:"currentDrawerPlayerId"`
+	Status                string `json:"status"`
+}
+
+type WordSelectPayload struct {
+	PlayerId string `json:"playerId"`
+	Word     string `json:"word"`
+}
+
+type TurnEndedPayload struct {
+	RoomCode           string         `json:"code"`
+	CorrectWord        string         `json:"correctWord"`
+	GainedPoints       map[string]int `json:"gainedPoints"`
+	TotalScores        map[string]int `json:"totalScores"`
+	NextDrawerNickname string         `json:"nextDrawerNickname"`
+	Duration           int            `json:"duration"`
+}
+

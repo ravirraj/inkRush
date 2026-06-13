@@ -10,6 +10,8 @@ function GameScreen({ payload }) {
     wsRef,
     playerID,
     chatMessages,
+    wordOptions,
+    turnSummary,
   } = payload;
 
   const canvasRef = useRef(null);
@@ -194,123 +196,268 @@ function GameScreen({ payload }) {
     setChatInput("");
   };
 
+  const handleSelectWord = (word) => {
+    if (wsRef && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "word:select",
+          payload: {
+            playerId: playerID,
+            word: word,
+          },
+        }),
+      );
+    }
+  };
+
   return (
     <div>
       <h3>Game Screen</h3>
       <p>Status: {gameStatus}</p>
       <p>Round: {game ? game.currentRound : 0}</p>
       <p>Drawer Player: {game ? game.currentDrawerPlayerId : "None"}</p>
-      <p>Word: {game && (game.word ? game.word : game.maskedWord)}</p>
+      {gameStatus === "in_progress" && (
+        <p>Word: {game && (game.word ? game.word : game.maskedWord)}</p>
+      )}
 
       {isHost && gameStatus === "wating" && (
         <button onClick={onStartGame}>Start Game</button>
       )}
 
       <div style={{ display: "flex", gap: "20px", marginTop: "15px" }}>
-        {/* Canvas panel */}
-        <div>
-          <canvas
-            ref={canvasRef}
-            width={600}
-            height={400}
-            style={{
-              border: "2px solid #333",
-              backgroundColor: "#fff",
-              cursor: isDrawer ? "crosshair" : "not-allowed",
-              display: "block",
-              touchAction: "none",
-            }}
-            onMouseDown={handleStartDraw}
-            onMouseMove={handleDraw}
-            onMouseUp={handleEndDraw}
-            onMouseLeave={handleEndDraw}
-            onTouchStart={handleStartDraw}
-            onTouchMove={handleDraw}
-            onTouchEnd={handleEndDraw}
-          />
-          {isDrawer && (
-            <button onClick={handleClearCanvas} style={{ marginTop: "10px" }}>
-              Clear Canvas
-            </button>
-          )}
-        </div>
+        {/* Left Side: Game Active Screen (Word selection, Canvas drawing, or Turn transition summary) */}
+        {gameStatus !== "wating" && (
+          <div style={{ width: "600px", height: "400px" }}>
+            {gameStatus === "selecting_word" ? (
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  border: "2px solid #333",
+                  backgroundColor: "#f5f5f5",
+                  boxSizing: "border-box",
+                  padding: "20px",
+                }}
+              >
+                {isDrawer ? (
+                  <div style={{ textAlign: "center" }}>
+                    <h4>Choose a word to draw:</h4>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginTop: "15px",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {wordOptions &&
+                        wordOptions.map((word) => (
+                          <button
+                            key={word}
+                            onClick={() => handleSelectWord(word)}
+                            style={{
+                              padding: "12px 24px",
+                              fontSize: "16px",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                              border: "2px solid #333",
+                              backgroundColor: "#fff",
+                            }}
+                          >
+                            {word}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  <h4>Drawer is choosing a word...</h4>
+                )}
+              </div>
+            ) : gameStatus === "turn_transition" ? (
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  border: "2px solid #333",
+                  backgroundColor: "#fafafa",
+                  boxSizing: "border-box",
+                  padding: "20px",
+                  fontFamily: "sans-serif",
+                }}
+              >
+                <h3 style={{ color: "#333", margin: "0 0 10px 0" }}>
+                  Round Summary
+                </h3>
+                <h4 style={{ margin: "5px 0" }}>
+                  The word was:{" "}
+                  <span style={{ color: "blue", fontSize: "20px" }}>
+                    {turnSummary?.correctWord}
+                  </span>
+                </h4>
 
-        {/* Chat Feed & Input panel */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            width: "300px",
-            height: "400px",
-            border: "2px solid #333",
-          }}
-        >
+                <div
+                  style={{
+                    margin: "15px 0",
+                    width: "100%",
+                    maxWidth: "300px",
+                    border: "1px solid #ddd",
+                    padding: "10px",
+                    backgroundColor: "#fff",
+                  }}
+                >
+                  <h5 style={{ margin: "0 0 10px 0" }}>Scores this turn:</h5>
+                  {room &&
+                    room.players.map((p) => {
+                      const points =
+                        turnSummary?.gainedPoints?.[p.playerId] || 0;
+                      return (
+                        <div
+                          key={p.playerId}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            margin: "4px 0",
+                          }}
+                        >
+                          <span>{p.nickname}</span>
+                          <span
+                            style={{
+                              fontWeight: "bold",
+                              color: points > 0 ? "green" : "gray",
+                            }}
+                          >
+                            {points > 0 ? `+${points}` : "0"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <p style={{ fontStyle: "italic", margin: "10px 0 0 0" }}>
+                  Next drawer:{" "}
+                  <strong>{turnSummary?.nextDrawerNickname}</strong>
+                </p>
+              </div>
+            ) : (
+              <div>
+                <canvas
+                  ref={canvasRef}
+                  width={600}
+                  height={400}
+                  style={{
+                    border: "2px solid #333",
+                    backgroundColor: "#fff",
+                    cursor: isDrawer ? "crosshair" : "not-allowed",
+                    display: "block",
+                    touchAction: "none",
+                  }}
+                  onMouseDown={handleStartDraw}
+                  onMouseMove={handleDraw}
+                  onMouseUp={handleEndDraw}
+                  onMouseLeave={handleEndDraw}
+                  onTouchStart={handleStartDraw}
+                  onTouchMove={handleDraw}
+                  onTouchEnd={handleEndDraw}
+                />
+                {isDrawer && (
+                  <button
+                    onClick={handleClearCanvas}
+                    style={{ marginTop: "10px" }}
+                  >
+                    Clear Canvas
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Right Side: Chat Feed (always visible when game is active) */}
+        {gameStatus !== "wating" && (
           <div
             style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "10px",
-              backgroundColor: "#fafafa",
-              fontFamily: "sans-serif",
-              fontSize: "14px",
+              display: "flex",
+              flexDirection: "column",
+              width: "300px",
+              height: "400px",
+              border: "2px solid #333",
             }}
           >
-            {chatMessages &&
-              chatMessages.map((msg, index) => {
-                let style = { margin: "6px 0", wordBreak: "break-word" };
-                if (msg.type === "system") {
-                  style.color = "blue";
-                  style.fontWeight = "bold";
-                } else if (msg.type === "correct") {
-                  style.color = "green";
-                  style.fontWeight = "bold";
-                } else if (msg.type === "join" || msg.type === "leave") {
-                  style.color = "gray";
-                  style.fontStyle = "italic";
-                }
-                return (
-                  <div key={index} style={style}>
-                    {msg.type === "chat" ? (
-                      <>
-                        <strong>{msg.nickname}:</strong> {msg.message}
-                      </>
-                    ) : (
-                      msg.message
-                    )}
-                  </div>
-                );
-              })}
-            <div ref={chatEndRef} />
-          </div>
-
-          <form
-            onSubmit={handleSendChat}
-            style={{ display: "flex", borderTop: "2px solid #333" }}
-          >
-            <input
-              type="text"
-              placeholder={
-                isDrawer ? "Drawer cannot chat..." : "Type chat message..."
-              }
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              disabled={isDrawer}
+            <div
               style={{
                 flex: 1,
-                padding: "8px",
-                border: "none",
-                outline: "none",
+                overflowY: "auto",
+                padding: "10px",
+                backgroundColor: "#fafafa",
+                fontFamily: "sans-serif",
+                fontSize: "14px",
               }}
-            />
-            <button
-              type="submit"
-              disabled={isDrawer}
-              style={{ padding: "8px", cursor: "pointer" }}
             >
-              Send
-            </button>
-          </form>
-        </div>
+              {chatMessages &&
+                chatMessages.map((msg, index) => {
+                  let style = { margin: "6px 0", wordBreak: "break-word" };
+                  if (msg.type === "system") {
+                    style.color = "blue";
+                    style.fontWeight = "bold";
+                  } else if (msg.type === "correct") {
+                    style.color = "green";
+                    style.fontWeight = "bold";
+                  } else if (msg.type === "join" || msg.type === "leave") {
+                    style.color = "gray";
+                    style.fontStyle = "italic";
+                  }
+                  return (
+                    <div key={index} style={style}>
+                      {msg.type === "chat" ? (
+                        <>
+                          <strong>{msg.nickname}:</strong> {msg.message}
+                        </>
+                      ) : (
+                        msg.message
+                      )}
+                    </div>
+                  );
+                })}
+              <div ref={chatEndRef} />
+            </div>
+
+            <form
+              onSubmit={handleSendChat}
+              style={{ display: "flex", borderTop: "2px solid #333" }}
+            >
+              <input
+                type="text"
+                placeholder={
+                  isDrawer ? "Drawer cannot chat..." : "Type chat message..."
+                }
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={isDrawer}
+                style={{
+                  flex: 1,
+                  padding: "8px",
+                  border: "none",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={isDrawer}
+                style={{ padding: "8px", cursor: "pointer" }}
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: "15px" }}>
@@ -319,9 +466,12 @@ function GameScreen({ payload }) {
           placeholder="Submit Guess"
           value={payload.guess}
           onChange={(e) => payload.setGuess(e.target.value)}
-          disabled={isDrawer}
+          disabled={isDrawer || gameStatus !== "in_progress"}
         />
-        <button onClick={payload.onSubmitGuess} disabled={isDrawer}>
+        <button
+          onClick={payload.onSubmitGuess}
+          disabled={isDrawer || gameStatus !== "in_progress"}
+        >
           Submit Guess
         </button>
       </div>

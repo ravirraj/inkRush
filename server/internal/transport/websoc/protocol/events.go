@@ -19,5 +19,10 @@ const (
 	EventDrawStroke   = "draw:stroke"
 	EventDrawClear    = "draw:clear"
 	EventChatMessage  = "chat:message"
+	EventWordOptions   = "word:options"
+	EventWordSelecting = "word:selecting"
+	EventWordSelect    = "word:select"
+	EventTurnEnded     = "turn:ended"
+	EventGameReset     = "game:reset"
 )
 

@@ -15,4 +15,6 @@ type GameStruct struct {
 	TurnStartAt           time.Time
 	TurnEndsAt            time.Time
 	TurnNumber            int
+	CurrentWordOptions    []string
+	TurnPoints            map[string]int
 }

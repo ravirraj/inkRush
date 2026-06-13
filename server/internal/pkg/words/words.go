@@ -30,3 +30,20 @@ func GetMaskedWord(word string) string {
 	}
 	return masked
 }
+
+func GetThreeRandomWords() []string {
+	n := len(easyDrawWords)
+	if n < 3 {
+		return easyDrawWords
+	}
+	selected := make([]string, 0, 3)
+	indices := make(map[int]bool)
+	for len(selected) < 3 {
+		idx := rng.Intn(n)
+		if !indices[idx] {
+			indices[idx] = true
+			selected = append(selected, easyDrawWords[idx])
+		}
+	}
+	return selected
+}
