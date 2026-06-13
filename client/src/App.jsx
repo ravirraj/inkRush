@@ -5,10 +5,15 @@ import GameScreen from "./components/GameScreen";
 
 function App() {
   const [nickname, setNickname] = useState("");
-  const [code, setCode] = useState("");
+
+  // Read invite code from URL on first load (?room=XXXXXX)
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlRoomCode = urlParams.get("room") || "";
+
+  const [code, setCode] = useState(urlRoomCode);
   const wsRef = useRef(null);
   const pendingAction = useRef(null);
-  const codeRef = useRef(code);
+  const codeRef = useRef(urlRoomCode);
   const onDrawStrokeRef = useRef(null);
   const onDrawClearRef = useRef(null);
 
@@ -27,6 +32,7 @@ function App() {
 
   const [playerID, setPlayerID] = useState("");
   const [guess, setGuess] = useState("");
+  const [revealedWord, setRevealedWord] = useState("");
 
   useEffect(() => {
     let ws = new WebSocket("ws://localhost:8080/ws");
@@ -84,6 +90,8 @@ function App() {
           setHasGuessedCorrectly(false);
           console.log("Room is ready:", msg.payload);
           pendingAction.current = null;
+          // Push room code into URL so the host can share the invite link
+          window.history.replaceState({}, "", `?room=${msg.payload.code}`);
           break;
 
         case "game:started":
@@ -100,6 +108,8 @@ function App() {
           setTurnSummary(null);
           setGameSummary(null);
           setHasGuessedCorrectly(false);
+          setRevealedWord("");
+          setChatMessages([]);
           break;
 
         case "word:options":
@@ -117,17 +127,23 @@ function App() {
           setTurnSummary(null);
           setGameSummary(null);
           setHasGuessedCorrectly(false);
+          setRevealedWord("");
+          // Note: do NOT clear chat here — wait for turn:started
           break;
 
         case "system:error":
           console.log("Error from server:", msg.payload);
           setError(msg.payload.ErrorMessage);
+          // Auto-dismiss the error after 5 seconds
+          setTimeout(() => setError(null), 5000);
           break;
 
         case "guess:result":
           console.log("Guess result:", msg.payload);
           if (msg.payload.playerId === playerID && msg.payload.isCorrect) {
             setHasGuessedCorrectly(true);
+            // Store the revealed word for this player
+            if (msg.payload.correctWord) setRevealedWord(msg.payload.correctWord);
           }
           setGame((prevGame) => {
             if (!prevGame) return null;
@@ -177,7 +193,11 @@ function App() {
 
         case "chat:message":
           console.log("Chat message received:", msg.payload);
-          setChatMessages((prev) => [...prev, msg.payload]);
+          setChatMessages((prev) => {
+            const next = [...prev, msg.payload];
+            // Keep at most 80 messages — trim oldest from the top
+            return next.length > 80 ? next.slice(next.length - 80) : next;
+          });
           break;
         default:
           console.log("Unknown message type:", msg.type);
@@ -261,28 +281,30 @@ function App() {
   }
   return (
     <div className="app-terminal">
-      <header className="glitch-logo">
-        inkRush
-      </header>
-
       {room ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <Lobby room={room} />
           <GameScreen
-            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary, gameSummary, hasGuessedCorrectly }}
+            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary, gameSummary, hasGuessedCorrectly, revealedWord }}
           />
+          <Lobby room={room} />
         </div>
       ) : (
-        <HomeScreen
-          payload={{
-            nickname,
-            setNickname,
-            code,
-            setCode,
-            onCreateRoom,
-            onJoinRoom,
-          }}
-        />
+        <>
+          <header className="glitch-logo">
+            inkRush
+          </header>
+          <HomeScreen
+            payload={{
+              nickname,
+              setNickname,
+              code,
+              setCode,
+              onCreateRoom,
+              onJoinRoom,
+              inviteCode: urlRoomCode,
+            }}
+          />
+        </>
       )}
 
       {error && <div className="error-alert">WARNING: {error}</div>}

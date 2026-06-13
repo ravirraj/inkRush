@@ -609,6 +609,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 
 				GuessResultPayload.PointAwareded = points
 				GuessResultPayload.DrawerPointAwarded = currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId]
+				GuessResultPayload.CorrectWord = currentRoom.Game.CurrentWord // reveal word to correct guesser
 
 				GuessResultPayload.IsCorrect = true
 				for _, pid := range currentRoom.Players {

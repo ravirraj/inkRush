@@ -68,6 +68,7 @@ type GuessResultPayload struct {
 	PointAwareded      int            `json:"pointsAwarded"`
 	DrawerPointAwarded int            `json:"drawerPoints"`
 	Scores             map[string]int `json:"score"`
+	CorrectWord        string         `json:"correctWord"` // only populated on correct guesses
 }
 
 type LeaderboardEntry struct {
@@ -90,6 +91,7 @@ type DrawStrokePayload struct {
 	CurrentY  float64 `json:"currentY"`
 	Color     string  `json:"color"`
 	LineWidth int     `json:"lineWidth"`
+	IsEraser  bool    `json:"isEraser"` // true when the drawer is using the eraser tool
 }
 
 type DrawClearPayload struct {
