@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -385,6 +386,64 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			h.BoardcastGameReady(roomInStore)
 			h.BoardcastWordSelectionState(roomInStore)
 			h.ShaduleWordSelectionTimeOut(roomInStore, roomInStore.Game.TurnNumber)
+
+		case protocol.EventGameReset:
+			var resetPayload struct {
+				PlayerId string `json:"playerId"`
+			}
+			err := json.Unmarshal(envelope.PayLoad, &resetPayload)
+			if err != nil {
+				fmt.Println("Error in EventGameReset unmarshal", err)
+				continue
+			}
+
+			if resetPayload.PlayerId == "" {
+				errPayload := protocol.ErrorPayload{
+					ErrorMessage: "Player ID is required",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				continue
+			}
+
+			playerInStore, exists := h.sessionStore.GetByID(resetPayload.PlayerId)
+			if !exists {
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is not in session",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			if playerInStore.CurrentRoomCode == "" {
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Player is not in any room",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			roomInStore, exists := h.roomStore.GetByCode(playerInStore.CurrentRoomCode)
+			if !exists {
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Room does not exist",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			if roomInStore.HostPlayerID != playerInStore.Id {
+				errMessage := protocol.ErrorPayload{
+					ErrorMessage: "Only the host can reset the game",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errMessage)
+				continue
+			}
+
+			roomInStore.Game = &game.GameStruct{
+				Status: room.Wating,
+			}
+
+			h.BoardcastRoomReady(roomInStore)
 
 		case protocol.EventGuessSubmit:
 			var GuessSubmitPayload protocol.GuessSubmitPayload
@@ -960,13 +1019,52 @@ func (h *WebSocketHandler) BoardcastGuessResult(currentRomm *room.Room, payload 
 }
 
 func (h *WebSocketHandler) BoardcastGameEnded(currentRoom *room.Room) {
+	currentRoom.Game.Status = "ended"
+
+	var entries []protocol.LeaderboardEntry
+	for _, pid := range currentRoom.Players {
+		nickname := "Unknown"
+		p, exists := h.sessionStore.GetByID(pid)
+		if exists {
+			nickname = p.Nickname
+		}
+		score := 0
+		if currentRoom.Game.Scores != nil {
+			score = currentRoom.Game.Scores[pid]
+		}
+		entries = append(entries, protocol.LeaderboardEntry{
+			PlayerId: pid,
+			Nickname: nickname,
+			Score:    score,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Score > entries[j].Score
+	})
+
+	var winners []string
+	if len(entries) > 0 {
+		highestScore := entries[0].Score
+		for _, entry := range entries {
+			if entry.Score == highestScore {
+				winners = append(winners, entry.Nickname)
+			} else {
+				break
+			}
+		}
+	}
+
+	gameEndedPayload := protocol.GameEndedPayload{
+		Winners:     winners,
+		Leaderboard: entries,
+		Scores:      currentRoom.Game.Scores,
+	}
+
 	for _, playerId := range currentRoom.Players {
 		conn, exists := h.connStore.GetByPlayerID(playerId)
 		if exists == false {
 			continue
-		}
-		gameEndedPayload := protocol.GameEndedPayload{
-			Score: currentRoom.Game.Scores,
 		}
 		SendEnvelope(conn, protocol.EventGameEnded, gameEndedPayload)
 	}

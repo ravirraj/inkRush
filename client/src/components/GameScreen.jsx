@@ -12,6 +12,7 @@ function GameScreen({ payload }) {
     chatMessages,
     wordOptions,
     turnSummary,
+    gameSummary,
   } = payload;
 
   const canvasRef = useRef(null);
@@ -210,6 +211,17 @@ function GameScreen({ payload }) {
     }
   };
 
+  const handlePlayAgain = () => {
+    if (wsRef && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "game:reset",
+          payload: { playerId: playerID },
+        }),
+      );
+    }
+  };
+
   return (
     <div>
       <h3>Game Screen</h3>
@@ -346,6 +358,87 @@ function GameScreen({ payload }) {
                   <strong>{turnSummary?.nextDrawerNickname}</strong>
                 </p>
               </div>
+            ) : gameStatus === "ended" ? (
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  border: "2px solid #333",
+                  backgroundColor: "#fffdf0",
+                  boxSizing: "border-box",
+                  padding: "20px",
+                  fontFamily: "sans-serif",
+                }}
+              >
+                <h2 style={{ color: "#333", margin: "0 0 10px 0" }}>🏆 Game Over! 🏆</h2>
+                {gameSummary && gameSummary.winners && (
+                  <h3 style={{ margin: "5px 0", color: "#d97706" }}>
+                    Winner{gameSummary.winners.length > 1 ? "s" : ""}: {gameSummary.winners.join(", ")}
+                  </h3>
+                )}
+
+                <div
+                  style={{
+                    margin: "15px 0",
+                    width: "100%",
+                    maxWidth: "400px",
+                    border: "1px solid #ddd",
+                    padding: "10px",
+                    backgroundColor: "#fff",
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>
+                    Final Standings
+                  </h4>
+                  {gameSummary && gameSummary.leaderboard &&
+                    gameSummary.leaderboard.map((entry, index) => {
+                      let rankText = `${index + 1}th`;
+                      if (index === 0) rankText = "1st 🥇";
+                      else if (index === 1) rankText = "2nd 🥈";
+                      else if (index === 2) rankText = "3rd 🥉";
+
+                      return (
+                        <div
+                          key={entry.playerId}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "6px 0",
+                            borderBottom: "1px dashed #eee",
+                            fontWeight: index === 0 ? "bold" : "normal"
+                          }}
+                        >
+                          <span>{rankText} - {entry.nickname}</span>
+                          <span>{entry.score} pts</span>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+
+                {isHost && (
+                  <button
+                    onClick={handlePlayAgain}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "16px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      border: "2px solid #333",
+                      backgroundColor: "#4caf50",
+                      color: "#fff",
+                      borderRadius: "4px",
+                      marginTop: "10px"
+                    }}
+                  >
+                    Play Again
+                  </button>
+                )}
+              </div>
             ) : (
               <div>
                 <canvas
@@ -460,21 +553,23 @@ function GameScreen({ payload }) {
         )}
       </div>
 
-      <div style={{ marginTop: "15px" }}>
-        <input
-          type="text"
-          placeholder="Submit Guess"
-          value={payload.guess}
-          onChange={(e) => payload.setGuess(e.target.value)}
-          disabled={isDrawer || gameStatus !== "in_progress"}
-        />
-        <button
-          onClick={payload.onSubmitGuess}
-          disabled={isDrawer || gameStatus !== "in_progress"}
-        >
-          Submit Guess
-        </button>
-      </div>
+      {gameStatus === "in_progress" && (
+        <div style={{ marginTop: "15px" }}>
+          <input
+            type="text"
+            placeholder="Submit Guess"
+            value={payload.guess}
+            onChange={(e) => payload.setGuess(e.target.value)}
+            disabled={isDrawer}
+          />
+          <button
+            onClick={payload.onSubmitGuess}
+            disabled={isDrawer}
+          >
+            Submit Guess
+          </button>
+        </div>
+      )}
     </div>
   );
 }

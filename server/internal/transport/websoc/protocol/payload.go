@@ -70,8 +70,16 @@ type GuessResultPayload struct {
 	Scores             map[string]int `json:"score"`
 }
 
+type LeaderboardEntry struct {
+	PlayerId string `json:"playerId"`
+	Nickname string `json:"nickname"`
+	Score    int    `json:"score"`
+}
+
 type GameEndedPayload struct {
-	Score map[string]int `json:"score"`
+	Winners     []string           `json:"winners"`
+	Leaderboard []LeaderboardEntry `json:"leaderboard"`
+	Scores      map[string]int     `json:"scores"`
 }
 
 type DrawStrokePayload struct {

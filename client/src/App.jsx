@@ -21,6 +21,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [wordOptions, setWordOptions] = useState([]);
   const [turnSummary, setTurnSummary] = useState(null);
+  const [gameSummary, setGameSummary] = useState(null);
   // const [turn, setTurn] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
@@ -78,6 +79,7 @@ function App() {
           setChatMessages([]);
           setWordOptions([]);
           setTurnSummary(null);
+          setGameSummary(null);
           console.log("Room is ready:", msg.payload);
           pendingAction.current = null;
           break;
@@ -85,6 +87,7 @@ function App() {
         case "game:started":
           console.log("Game has started:", msg.payload);
           setGame(msg.payload);
+          setGameSummary(null);
           break;
 
         case "turn:started":
@@ -92,6 +95,7 @@ function App() {
           setGame(msg.payload);
           setWordOptions([]);
           setTurnSummary(null);
+          setGameSummary(null);
           break;
 
         case "word:options":
@@ -99,12 +103,14 @@ function App() {
           setGame(msg.payload);
           setWordOptions(msg.payload.words || []);
           setTurnSummary(null);
+          setGameSummary(null);
           break;
 
         case "word:selecting":
           console.log("Drawer is selecting a word:", msg.payload);
           setGame(msg.payload);
           setTurnSummary(null);
+          setGameSummary(null);
           break;
 
         case "system:error":
@@ -125,7 +131,14 @@ function App() {
 
         case "game:ended":
           console.log("Game has ended:", msg.payload);
-          // setGame(msg.payload);
+          setGame((prevGame) => {
+            if (!prevGame) return null;
+            return {
+              ...prevGame,
+              status: "ended",
+            };
+          });
+          setGameSummary(msg.payload);
           break;
 
         case "turn:ended":
@@ -245,7 +258,7 @@ function App() {
         <>
           <Lobby room={room} />
           <GameScreen
-            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary }}
+            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary, gameSummary }}
           />
         </>
       ) : (
