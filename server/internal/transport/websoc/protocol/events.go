@@ -16,4 +16,7 @@ const (
 	EventGuessSubmit  = "guess:submit"
 	EventGuessResult  = "guess:result"
 	EventGameEnded = "game:ended"
+	EventDrawStroke   = "draw:stroke"
+	EventDrawClear    = "draw:clear"
 )
+

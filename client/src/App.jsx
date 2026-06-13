@@ -9,6 +9,8 @@ function App() {
   const wsRef = useRef(null);
   const pendingAction = useRef(null);
   const codeRef = useRef(code);
+  const onDrawStrokeRef = useRef(null);
+  const onDrawClearRef = useRef(null);
 
   useEffect(() => {
     codeRef.current = code;
@@ -98,6 +100,18 @@ function App() {
           console.log("Game has ended:", msg.payload);
           // setGame(msg.payload);
           break;
+
+        case "draw:stroke":
+          if (onDrawStrokeRef.current) {
+            onDrawStrokeRef.current(msg.payload);
+          }
+          break;
+
+        case "draw:clear":
+          if (onDrawClearRef.current) {
+            onDrawClearRef.current(msg.payload);
+          }
+          break;
         default:
           console.log("Unknown message type:", msg.type);
       }
@@ -108,7 +122,7 @@ function App() {
     ws.onerror = (e) => {
       console.log("WebSocket error");
       setError("WebSocket error occurred");
-      s;
+      console.log(e);
     };
 
     return () => {
@@ -186,7 +200,7 @@ function App() {
         <>
           <Lobby room={room} />
           <GameScreen
-            payload={{ game, onStartGame, guess, setGuess, onSubmitGuess }}
+            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID }}
           />
         </>
       ) : (

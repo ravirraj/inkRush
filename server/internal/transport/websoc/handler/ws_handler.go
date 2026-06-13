@@ -528,6 +528,110 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				h.AdvanceTurn(currentRoom)
 			}
 
+		case protocol.EventDrawStroke:
+			var drawStrokePayload protocol.DrawStrokePayload
+			err := json.Unmarshal(envelope.PayLoad, &drawStrokePayload)
+			if err != nil {
+				fmt.Println("ERR in EventDrawStroke unmarshal:", err)
+				continue
+			}
+
+			if drawStrokePayload.PlayerId == "" {
+				fmt.Println("EventDrawStroke: Player ID is required")
+				continue
+			}
+
+			currentPlayer, exists := h.sessionStore.GetByID(drawStrokePayload.PlayerId)
+			if !exists {
+				fmt.Println("EventDrawStroke: Player does not exist in session store")
+				continue
+			}
+
+			if currentPlayer.CurrentRoomCode == "" {
+				fmt.Println("EventDrawStroke: Player is not in any room")
+				continue
+			}
+
+			currentRoom, exists := h.roomStore.GetByCode(currentPlayer.CurrentRoomCode)
+			if !exists {
+				fmt.Println("EventDrawStroke: Room does not exist")
+				continue
+			}
+
+			if currentRoom.Game.Status != room.In_Progress {
+				fmt.Println("EventDrawStroke: Game is not in progress")
+				continue
+			}
+
+			if currentRoom.Game.CurrentDrawerPlayerId != drawStrokePayload.PlayerId {
+				fmt.Println("EventDrawStroke: Sender is not the current drawer")
+				continue
+			}
+
+			// Broadcast to other players in the room
+			for _, playerId := range currentRoom.Players {
+				if playerId == drawStrokePayload.PlayerId {
+					continue
+				}
+				conn, exists := h.connStore.GetByPlayerID(playerId)
+				if !exists {
+					continue
+				}
+				SendEnvelope(conn, protocol.EventDrawStroke, drawStrokePayload)
+			}
+
+		case protocol.EventDrawClear:
+			var drawClearPayload protocol.DrawClearPayload
+			err := json.Unmarshal(envelope.PayLoad, &drawClearPayload)
+			if err != nil {
+				fmt.Println("ERR in EventDrawClear unmarshal:", err)
+				continue
+			}
+
+			if drawClearPayload.PlayerId == "" {
+				fmt.Println("EventDrawClear: Player ID is required")
+				continue
+			}
+
+			currentPlayer, exists := h.sessionStore.GetByID(drawClearPayload.PlayerId)
+			if !exists {
+				fmt.Println("EventDrawClear: Player does not exist in session store")
+				continue
+			}
+
+			if currentPlayer.CurrentRoomCode == "" {
+				fmt.Println("EventDrawClear: Player is not in any room")
+				continue
+			}
+
+			currentRoom, exists := h.roomStore.GetByCode(currentPlayer.CurrentRoomCode)
+			if !exists {
+				fmt.Println("EventDrawClear: Room does not exist")
+				continue
+			}
+
+			if currentRoom.Game.Status != room.In_Progress {
+				fmt.Println("EventDrawClear: Game is not in progress")
+				continue
+			}
+
+			if currentRoom.Game.CurrentDrawerPlayerId != drawClearPayload.PlayerId {
+				fmt.Println("EventDrawClear: Sender is not the current drawer")
+				continue
+			}
+
+			// Broadcast to other players in the room
+			for _, playerId := range currentRoom.Players {
+				if playerId == drawClearPayload.PlayerId {
+					continue
+				}
+				conn, exists := h.connStore.GetByPlayerID(playerId)
+				if !exists {
+					continue
+				}
+				SendEnvelope(conn, protocol.EventDrawClear, drawClearPayload)
+			}
+
 		default:
 			errPaylaod := protocol.ErrorPayload{
 				ErrorMessage: "Unkonwn Error",
@@ -646,6 +750,7 @@ func (h *WebSocketHandler) BoardcastGameReady(currentRoom *room.Room) {
 		RoomCode:              currentRoom.Code,
 		CurrentRound:          currentRoom.Game.CurrentRound,
 		CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+		Status:                currentRoom.Game.Status,
 	}
 	for _, player := range currentRoom.Players {
 		conn, exists := h.connStore.GetByPlayerID(player)
@@ -665,6 +770,7 @@ func (h *WebSocketHandler) BoardcastTurnStared(currentRoom *room.Room) {
 			RoomCode:              currentRoom.Code,
 			CurrentRound:          currentRoom.Game.CurrentRound,
 			CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+			Status:                currentRoom.Game.Status,
 		}
 		conn, exists := h.connStore.GetByPlayerID(playerId)
 		if exists == false {

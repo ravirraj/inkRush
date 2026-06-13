@@ -42,6 +42,7 @@ type GameStartedPayload struct {
 	RoomCode              string `json:"code"`
 	CurrentRound          int    `json:"currentRound"`
 	CurrentDrawerPlayerId string `json:"currentDrawerPlayerId"`
+	Status                string `json:"status"`
 }
 
 type TurnStaredPayload struct {
@@ -49,6 +50,7 @@ type TurnStaredPayload struct {
 
 	CurrentRound          int    `json:"currentRound"`
 	CurrentDrawerPlayerId string `json:"currentDrawerPlayerId"`
+	Status                string `json:"status"`
 
 	Word       string `json:"word"`
 	MaskedWord string `json:"maskedWord"`
@@ -71,3 +73,18 @@ type GuessResultPayload struct {
 type GameEndedPayload struct {
 	Score map[string]int `json:"score"`
 }
+
+type DrawStrokePayload struct {
+	PlayerId  string  `json:"playerId"`
+	PrevX     float64 `json:"prevX"`
+	PrevY     float64 `json:"prevY"`
+	CurrentX  float64 `json:"currentX"`
+	CurrentY  float64 `json:"currentY"`
+	Color     string  `json:"color"`
+	LineWidth int     `json:"lineWidth"`
+}
+
+type DrawClearPayload struct {
+	PlayerId string `json:"playerId"`
+}
+
