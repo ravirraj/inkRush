@@ -4,7 +4,15 @@ This directory holds references to inkRush system architecture designs.
 
 ---
 
-## 📐 Unified Flow & Component Layout
+## 🎨 Editorial System Architecture Diagram
+
+Below is a pictorial view of the inkRush client-server design, covering the frontend components, connection protocols, and server stores:
+
+![inkRush System Architecture](./system_architecture.png)
+
+---
+
+## 📐 Unified Flow & Component Layout (Mermaid)
 
 ```mermaid
 graph TB
@@ -37,3 +45,4 @@ graph TB
 
     WSClass -- "WS /ws Protocol (JSON)" --> GinRouter
 ```
+
