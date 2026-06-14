@@ -139,3 +139,9 @@ type HintRevealPayload struct {
 	MaskedWord string `json:"maskedWord"` // e.g. "_,p,_,_,l,e," — partially revealed
 }
 
+type SessionReconnectPayload struct {
+	PlayerID string `json:"playerId"`
+	Nickname string `json:"nickname"`
+	Code     string `json:"code"`
+}
+

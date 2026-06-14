@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import HomeScreen from "./components/HomeScreen";
 import Lobby from "./components/Lobby";
 import GameScreen from "./components/GameScreen";
+import { useWebSocket } from "./hooks/useWebSocket";
 
 function App() {
   const [nickname, setNickname] = useState("");
@@ -20,6 +21,7 @@ function App() {
   useEffect(() => {
     codeRef.current = code;
   }, [code]);
+
   const [room, setRoom] = useState(null);
   const [game, setGame] = useState(null);
   const [error, setError] = useState(null);
@@ -28,265 +30,207 @@ function App() {
   const [turnSummary, setTurnSummary] = useState(null);
   const [gameSummary, setGameSummary] = useState(null);
   const [hasGuessedCorrectly, setHasGuessedCorrectly] = useState(false);
-  // const [turn, setTurn] = useState(null);
 
   const [playerID, setPlayerID] = useState("");
   const [guess, setGuess] = useState("");
   const [revealedWord, setRevealedWord] = useState("");
 
+  const handleWebSocketEvent = (msg) => {
+    switch (msg.type) {
+      case "session:ready":
+        console.log("Session is ready");
+        const newPlayer = msg.payload.playerId;
+        setPlayerID(newPlayer);
+        
+        sessionStorage.setItem("inkrush_player_id", newPlayer);
+        sessionStorage.setItem("inkrush_nickname", msg.payload.nickname || nickname);
+
+        if (pendingAction.current === "create") {
+          sendEvent("room:create", { playerId: newPlayer });
+        }
+        if (pendingAction.current === "join") {
+          sendEvent("room:join", { code: codeRef.current, playerId: newPlayer });
+        }
+        break;
+
+      case "room:ready":
+        setRoom(msg.payload);
+        
+        sessionStorage.setItem("inkrush_room_code", msg.payload.code);
+
+        if (!game || game.status === "wating") {
+          setChatMessages([]);
+          setWordOptions([]);
+          setTurnSummary(null);
+          setGameSummary(null);
+          setHasGuessedCorrectly(false);
+        }
+        pendingAction.current = null;
+        window.history.replaceState({}, "", `?room=${msg.payload.code}`);
+        break;
+
+      case "game:started":
+        setGame(msg.payload);
+        setGameSummary(null);
+        setHasGuessedCorrectly(false);
+        break;
+
+      case "turn:started":
+        setGame(msg.payload);
+        setWordOptions([]);
+        setTurnSummary(null);
+        setGameSummary(null);
+        setHasGuessedCorrectly(false);
+        setRevealedWord("");
+        setChatMessages([]);
+        break;
+
+      case "word:options":
+        setGame(msg.payload);
+        setWordOptions(msg.payload.words || []);
+        setTurnSummary(null);
+        setGameSummary(null);
+        setHasGuessedCorrectly(false);
+        break;
+
+      case "word:selecting":
+        setGame(msg.payload);
+        setTurnSummary(null);
+        setGameSummary(null);
+        setHasGuessedCorrectly(false);
+        setRevealedWord("");
+        break;
+
+      case "system:error":
+        setError(msg.payload.ErrorMessage);
+        if (msg.payload.ErrorMessage.includes("invalid") || msg.payload.ErrorMessage.includes("does not exist") || msg.payload.ErrorMessage.includes("Not Present")) {
+          sessionStorage.removeItem("inkrush_room_code");
+          sessionStorage.removeItem("inkrush_player_id");
+          sessionStorage.removeItem("inkrush_nickname");
+          setRoom(null);
+          setGame(null);
+        }
+        setTimeout(() => setError(null), 5000);
+        break;
+
+      case "guess:result":
+        if (msg.payload.playerId === playerID && msg.payload.isCorrect) {
+          setHasGuessedCorrectly(true);
+          if (msg.payload.correctWord) setRevealedWord(msg.payload.correctWord);
+        }
+        setGame((prevGame) => {
+          if (!prevGame) return null;
+          return {
+            ...prevGame,
+            scores: msg.payload.score,
+          };
+        });
+        break;
+
+      case "game:ended":
+        setGame((prevGame) => {
+          if (!prevGame) return null;
+          return {
+            ...prevGame,
+            status: "ended",
+          };
+        });
+        setGameSummary(msg.payload);
+        break;
+
+      case "turn:ended":
+        setGame((prevGame) => {
+          if (!prevGame) return null;
+          return {
+            ...prevGame,
+            status: "turn_transition",
+            scores: msg.payload.totalScores,
+          };
+        });
+        setTurnSummary(msg.payload);
+        break;
+
+      case "draw:stroke":
+        if (onDrawStrokeRef.current) {
+          onDrawStrokeRef.current(msg.payload);
+        }
+        break;
+
+      case "draw:clear":
+        if (onDrawClearRef.current) {
+          onDrawClearRef.current(msg.payload);
+        }
+        break;
+
+      case "chat:message":
+        setChatMessages((prev) => {
+          const next = [...prev, msg.payload];
+          return next.length > 80 ? next.slice(next.length - 80) : next;
+        });
+        break;
+
+      case "hint:reveal":
+        setGame((prevGame) => {
+          if (!prevGame) return null;
+          return { ...prevGame, maskedWord: msg.payload.maskedWord };
+        });
+        break;
+
+      default:
+        console.log("Unknown message type:", msg.type);
+    }
+  };
+
+  const { sendEvent, ws, isOpen } = useWebSocket(import.meta.env.VITE_WS_URL, handleWebSocketEvent);
+
+  // Sync the raw ws Ref and trigger reconnection if saved state exists and socket is fully OPEN
   useEffect(() => {
-    let ws = new WebSocket(import.meta.env.VITE_WS_URL);
+    if (ws) {
+      wsRef.current = ws;
+    } else {
+      wsRef.current = null;
+    }
 
-    wsRef.current = ws;
+    if (isOpen) {
+      const savedPlayerID = sessionStorage.getItem("inkrush_player_id");
+      const savedNickname = sessionStorage.getItem("inkrush_nickname");
+      const savedRoomCode = sessionStorage.getItem("inkrush_room_code");
 
-    ws.onopen = () => {
-      console.log("WebSocket connection established");
-    };
-
-    ws.onmessage = (e) => {
-      console.log(e);
-
-      let msg = JSON.parse(e.data);
-      console.log(msg.type);
-
-      switch (msg.type) {
-        case "session:ready":
-          console.log("Session is ready");
-          const newPlayer = msg.payload.playerId;
-          setPlayerID(newPlayer);
-          console.log(playerID);
-          if (pendingAction.current === "create") {
-            console.log("in create");
-            // Handle create room logic
-            ws.send(
-              JSON.stringify({
-                type: "room:create",
-                payload: { playerId: newPlayer },
-              }),
-            );
-          }
-
-          if (pendingAction.current === "join") {
-            // Handle join room logic
-            console.log("in join");
-            console.log("new player ID:", newPlayer);
-
-            console.log("code", codeRef.current);
-
-            ws.send(
-              JSON.stringify({
-                type: "room:join",
-                payload: { code: codeRef.current, playerId: newPlayer },
-              }),
-            );
-          }
-          break;
-        case "room:ready":
-          setRoom(msg.payload);
-          setChatMessages([]);
-          setWordOptions([]);
-          setTurnSummary(null);
-          setGameSummary(null);
-          setHasGuessedCorrectly(false);
-          console.log("Room is ready:", msg.payload);
-          pendingAction.current = null;
-          // Push room code into URL so the host can share the invite link
-          window.history.replaceState({}, "", `?room=${msg.payload.code}`);
-          break;
-
-        case "game:started":
-          console.log("Game has started:", msg.payload);
-          setGame(msg.payload);
-          setGameSummary(null);
-          setHasGuessedCorrectly(false);
-          break;
-
-        case "turn:started":
-          console.log("Turn has started:", msg.payload);
-          setGame(msg.payload);
-          setWordOptions([]);
-          setTurnSummary(null);
-          setGameSummary(null);
-          setHasGuessedCorrectly(false);
-          setRevealedWord("");
-          setChatMessages([]);
-          break;
-
-        case "word:options":
-          console.log("Word options received:", msg.payload);
-          setGame(msg.payload);
-          setWordOptions(msg.payload.words || []);
-          setTurnSummary(null);
-          setGameSummary(null);
-          setHasGuessedCorrectly(false);
-          break;
-
-        case "word:selecting":
-          console.log("Drawer is selecting a word:", msg.payload);
-          setGame(msg.payload);
-          setTurnSummary(null);
-          setGameSummary(null);
-          setHasGuessedCorrectly(false);
-          setRevealedWord("");
-          // Note: do NOT clear chat here — wait for turn:started
-          break;
-
-        case "system:error":
-          console.log("Error from server:", msg.payload);
-          setError(msg.payload.ErrorMessage);
-          // Auto-dismiss the error after 5 seconds
-          setTimeout(() => setError(null), 5000);
-          break;
-
-        case "guess:result":
-          console.log("Guess result:", msg.payload);
-          if (msg.payload.playerId === playerID && msg.payload.isCorrect) {
-            setHasGuessedCorrectly(true);
-            // Store the revealed word for this player
-            if (msg.payload.correctWord) setRevealedWord(msg.payload.correctWord);
-          }
-          setGame((prevGame) => {
-            if (!prevGame) return null;
-            return {
-              ...prevGame,
-              scores: msg.payload.score,
-            };
-          });
-          break;
-
-        case "game:ended":
-          console.log("Game has ended:", msg.payload);
-          setGame((prevGame) => {
-            if (!prevGame) return null;
-            return {
-              ...prevGame,
-              status: "ended",
-            };
-          });
-          setGameSummary(msg.payload);
-          break;
-
-        case "turn:ended":
-          console.log("Turn ended summary:", msg.payload);
-          setGame((prevGame) => {
-            if (!prevGame) return null;
-            return {
-              ...prevGame,
-              status: "turn_transition",
-              scores: msg.payload.totalScores,
-            };
-          });
-          setTurnSummary(msg.payload);
-          break;
-
-        case "draw:stroke":
-          if (onDrawStrokeRef.current) {
-            onDrawStrokeRef.current(msg.payload);
-          }
-          break;
-
-        case "draw:clear":
-          if (onDrawClearRef.current) {
-            onDrawClearRef.current(msg.payload);
-          }
-          break;
-
-        case "chat:message":
-          console.log("Chat message received:", msg.payload);
-          setChatMessages((prev) => {
-            const next = [...prev, msg.payload];
-            // Keep at most 80 messages — trim oldest from the top
-            return next.length > 80 ? next.slice(next.length - 80) : next;
-          });
-          break;
-
-        case "hint:reveal":
-          // Server revealed a new letter — update maskedWord in game state
-          console.log("Hint revealed:", msg.payload.maskedWord);
-          setGame((prevGame) => {
-            if (!prevGame) return null;
-            return { ...prevGame, maskedWord: msg.payload.maskedWord };
-          });
-          break;
-
-        default:
-          console.log("Unknown message type:", msg.type);
+      if (savedPlayerID && savedNickname) {
+        console.log("Reconnecting session:", savedPlayerID, savedRoomCode);
+        sendEvent("session:reconnect", {
+          playerId: savedPlayerID,
+          nickname: savedNickname,
+          code: savedRoomCode || ""
+        });
       }
-    };
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
-    };
-    ws.onerror = (e) => {
-      console.log("WebSocket error");
-      setError("WebSocket error occurred");
-      console.log(e);
-    };
-
-    return () => {
-      ws.close();
-    };
-  }, []);
+    }
+  }, [ws, isOpen]);
 
   function onCreateRoom() {
-    console.log("Creating room");
-
     if (playerID) {
-      console.log("Player ID already set:", playerID);
-      wsRef.current.send(
-        JSON.stringify({
-          type: "room:create",
-          payload: { playerId: playerID },
-        }),
-      );
+      sendEvent("room:create", { playerId: playerID });
       return;
     }
     pendingAction.current = "create";
-    console.log(pendingAction.current);
-
-    wsRef.current.send(
-      JSON.stringify({
-        type: "session:init",
-        payload: { nickname: nickname },
-      }),
-    );
+    sendEvent("session:init", { nickname: nickname });
   }
+
   function onJoinRoom() {
     if (playerID) {
-      console.log("Player ID already set:", playerID);
-      wsRef.current.send(
-        JSON.stringify({
-          type: "room:join",
-          payload: { code: codeRef.current, playerId: playerID },
-        }),
-      );
+      sendEvent("room:join", { code: codeRef.current, playerId: playerID });
       return;
     }
     pendingAction.current = "join";
-    wsRef.current.send(
-      JSON.stringify({
-        type: "session:init",
-        payload: { nickname: nickname },
-      }),
-    );
+    sendEvent("session:init", { nickname: nickname });
   }
+
   function onStartGame() {
-    console.log("gamr sretfdfedfefgrfsgfdf");
-    wsRef.current.send(
-      JSON.stringify({
-        type: "game:start",
-        payload: { playerId: playerID },
-      }),
-    );
+    sendEvent("game:start", { playerId: playerID });
   }
 
   function onSubmitGuess() {
-    console.log("Submitting guess:", guess);
-    wsRef.current.send(
-      JSON.stringify({
-        type: "guess:submit",
-        payload: { playerId: playerID, guess: guess },
-      }),
-    );
+    sendEvent("guess:submit", { playerId: playerID, guess: guess });
     setGuess("");
   }
   return (

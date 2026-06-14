@@ -1,6 +1,7 @@
 package handler
 
 import (
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -46,6 +47,16 @@ func NewWebSocketHandler() *WebSocketHandler {
 	}
 }
 
+func generateSecureToken() string {
+	b := make([]byte, 16)
+	_, err := crand.Read(b)
+	if err != nil {
+		// Fallback if system entropy fails
+		return strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return fmt.Sprintf("%x", b)
+}
+
 func (h *WebSocketHandler) Handle(c *gin.Context) {
 	var currentPlayerId string
 
@@ -56,6 +67,10 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 	}
 	defer conn.Close()
 
+	// Rate limiting metrics: Max 25 messages per 2 seconds
+	var lastWindowStart = time.Now()
+	var messageCount = 0
+
 	for {
 		var envelope protocol.Envelope
 
@@ -65,6 +80,21 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			h.handleDisconnet(currentPlayerId)
 			fmt.Println(currentPlayerId, "connection closed")
 			break
+		}
+
+		// Rate Limiting Enforcement Check
+		now := time.Now()
+		if now.Sub(lastWindowStart) > 2*time.Second {
+			lastWindowStart = now
+			messageCount = 0
+		}
+		messageCount++
+		if messageCount > 25 {
+			errPayload := protocol.ErrorPayload{
+				ErrorMessage: "Rate limit exceeded. Slow down!",
+			}
+			SendEnvelope(conn, protocol.EventSystemError, errPayload)
+			continue
 		}
 
 		err = json.Unmarshal(message, &envelope)
@@ -110,9 +140,9 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
 				continue
 			}
-			idGen := time.Now().UnixNano()
-			convertedId := strconv.FormatInt(idGen, 10)
-			playerId := sessionInitPaylaod.Nickname + convertedId
+			
+			// Use cryptographically secure token
+			playerId := sessionInitPaylaod.Nickname + "_" + generateSecureToken()
 			player := player.Player{
 				Id:              playerId,
 				Nickname:        sessionInitPaylaod.Nickname,
@@ -131,6 +161,204 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			h.connStore.Add(player.Id, conn)
 
 			SendEnvelope(conn, protocol.EventSessionReady, sessionReadyPayload)
+
+		case protocol.EventSessionReconnect:
+			var reconnectPayload protocol.SessionReconnectPayload
+			err := json.Unmarshal(envelope.PayLoad, &reconnectPayload)
+			if err != nil {
+				fmt.Println("error reconnecting", err)
+				continue
+			}
+			if reconnectPayload.PlayerID == "" || reconnectPayload.Nickname == "" {
+				errPayload := protocol.ErrorPayload{
+					ErrorMessage: "Player ID and Nickname are required to reconnect",
+				}
+				SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				continue
+			}
+
+			// Restore session
+			player := player.Player{
+				Id:              reconnectPayload.PlayerID,
+				Nickname:        reconnectPayload.Nickname,
+				CurrentRoomCode: reconnectPayload.Code,
+			}
+			h.sessionStore.Add(&player)
+			h.connStore.Add(player.Id, conn)
+			currentPlayerId = player.Id
+
+			// Send session:ready to client so they know session is restored
+			sessionReadyPayload := protocol.SessionReadyPayload{
+				Nickname: player.Nickname,
+				PlayerID: player.Id,
+			}
+			SendEnvelope(conn, protocol.EventSessionReady, sessionReadyPayload)
+
+			// Restore room if it exists
+			if reconnectPayload.Code != "" {
+				currentRoom, exists := h.roomStore.GetByCode(reconnectPayload.Code)
+				if exists {
+					// Add player back to room's players list if not present
+					if !slices.Contains(currentRoom.Players, player.Id) {
+						currentRoom.Players = append(currentRoom.Players, player.Id)
+					}
+
+					// Broadcast updated lobby/room details to all users
+					h.BoardcastRoomReady(currentRoom)
+
+					// Broadcast reconnect announcement
+					h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+						PlayerId: "system",
+						Nickname: "System",
+						Message:  fmt.Sprintf("%s reconnected to the lobby", player.Nickname),
+						Type:     "join",
+					})
+
+					// If the game is in progress, also send them the current game state
+					// so they can view the active screen!
+					if currentRoom.Game != nil && currentRoom.Game.Status != "wating" {
+						gameStartedPayload := protocol.GameStartedPayload{
+							RoomCode:              currentRoom.Code,
+							CurrentRound:          currentRoom.Game.CurrentRound,
+							CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+							Status:                currentRoom.Game.Status,
+						}
+						SendEnvelope(conn, protocol.EventGameStarted, gameStartedPayload)
+
+						// Then, if in drawing turn or selecting word, send appropriate state
+						if currentRoom.Game.Status == "selecting_word" {
+							if currentRoom.Game.CurrentDrawerPlayerId == player.Id {
+								// Re-send word options if they are the drawer
+								payload := protocol.WordOptionsPayload{
+									RoomCode:              currentRoom.Code,
+									CurrentRound:          currentRoom.Game.CurrentRound,
+									CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+									Status:                currentRoom.Game.Status,
+									Words:                 currentRoom.Game.CurrentWordOptions,
+								}
+								SendEnvelope(conn, protocol.EventWordOptions, payload)
+							} else {
+								// Send selecting word to guessers
+								payload := protocol.WordSelectingPayload{
+									RoomCode:              currentRoom.Code,
+									CurrentRound:          currentRoom.Game.CurrentRound,
+									CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+									Status:                currentRoom.Game.Status,
+								}
+								SendEnvelope(conn, protocol.EventWordSelecting, payload)
+							}
+						} else if currentRoom.Game.Status == "in_progress" {
+							maskedWord := words.GetMaskedWord(currentRoom.Game.CurrentWord)
+							// If they already guessed correctly, reveal word.
+							hasGuessed := slices.Contains(currentRoom.Game.GussedPlayerIds, player.Id)
+
+							TurnStaredPayload := protocol.TurnStaredPayload{
+								RoomCode:              currentRoom.Code,
+								CurrentRound:          currentRoom.Game.CurrentRound,
+								CurrentDrawerPlayerId: currentRoom.Game.CurrentDrawerPlayerId,
+								Status:                currentRoom.Game.Status,
+							}
+							if player.Id == currentRoom.Game.CurrentDrawerPlayerId || hasGuessed {
+								TurnStaredPayload.Word = currentRoom.Game.CurrentWord
+								TurnStaredPayload.MaskedWord = maskedWord
+							} else {
+								TurnStaredPayload.Word = ""
+								TurnStaredPayload.MaskedWord = maskedWord
+							}
+							SendEnvelope(conn, protocol.EventTurnStared, TurnStaredPayload)
+
+							// Send hint state
+							if len(currentRoom.Game.HintRevealedPositions) > 0 {
+								revealedCount := 0
+								for _, rev := range currentRoom.Game.HintRevealedPositions {
+									if rev {
+										revealedCount++
+									}
+								}
+								if revealedCount > 0 {
+									hintMasked := words.BuildHintMaskedWord(currentRoom.Game.CurrentWord, currentRoom.Game.HintRevealedPositions)
+									SendEnvelope(conn, protocol.EventHintReveal, protocol.HintRevealPayload{
+										MaskedWord: hintMasked,
+									})
+								}
+							}
+
+							// If they already guessed correctly, we also need to inform the client so it sets hasGuessedCorrectly to true!
+							if hasGuessed {
+								guessResultPayload := protocol.GuessResultPayload{
+									PlayerId:           player.Id,
+									IsCorrect:          true,
+									Nickname:           player.Nickname,
+									PointAwareded:      0, // not recalculating points, just restoring state
+									DrawerPointAwarded: 0,
+									Scores:             currentRoom.Game.Scores,
+									CorrectWord:        currentRoom.Game.CurrentWord,
+								}
+								SendEnvelope(conn, protocol.EventGuessResult, guessResultPayload)
+							}
+						} else if currentRoom.Game.Status == "turn_transition" {
+							payload := protocol.TurnEndedPayload{
+								RoomCode:           currentRoom.Code,
+								CorrectWord:        currentRoom.Game.CurrentWord,
+								GainedPoints:       currentRoom.Game.TurnPoints,
+								TotalScores:        currentRoom.Game.Scores,
+								NextDrawerNickname: "Someone",
+								Duration:           8,
+							}
+							currentIndex := currentRoom.Game.DrawerIndex
+							nextIndex := (currentIndex + 1) % len(currentRoom.Players)
+							if nextDrawer, exists := h.sessionStore.GetByID(currentRoom.Players[nextIndex]); exists {
+								payload.NextDrawerNickname = nextDrawer.Nickname
+							}
+							SendEnvelope(conn, protocol.EventTurnEnded, payload)
+						} else if currentRoom.Game.Status == "ended" {
+							var entries []protocol.LeaderboardEntry
+							for _, pid := range currentRoom.Players {
+								nickname := "Unknown"
+								p, exists := h.sessionStore.GetByID(pid)
+								if exists {
+									nickname = p.Nickname
+								}
+								score := 0
+								if currentRoom.Game.Scores != nil {
+									score = currentRoom.Game.Scores[pid]
+								}
+								entries = append(entries, protocol.LeaderboardEntry{
+									PlayerId: pid,
+									Nickname: nickname,
+									Score:    score,
+								})
+							}
+							sort.Slice(entries, func(i, j int) bool {
+								return entries[i].Score > entries[j].Score
+							})
+							var winners []string
+							if len(entries) > 0 {
+								highestScore := entries[0].Score
+								for _, entry := range entries {
+									if entry.Score == highestScore {
+										winners = append(winners, entry.Nickname)
+									} else {
+										break
+									}
+								}
+							}
+							gameEndedPayload := protocol.GameEndedPayload{
+								Winners:     winners,
+								Leaderboard: entries,
+								Scores:      currentRoom.Game.Scores,
+							}
+							SendEnvelope(conn, protocol.EventGameEnded, gameEndedPayload)
+						}
+					}
+				} else {
+					// Room no longer exists (e.g. server restarted or grace period expired)
+					errPayload := protocol.ErrorPayload{
+						ErrorMessage: "Room no longer exists or session expired",
+					}
+					SendEnvelope(conn, protocol.EventSystemError, errPayload)
+				}
+			}
 
 		case protocol.EventRoomCreate:
 
@@ -947,7 +1175,16 @@ func (h *WebSocketHandler) handleDisconnet(playerId string) {
 	currentRoom.Players = players
 
 	if len(currentRoom.Players) == 0 {
-		h.roomStore.Remove(currentRoom.Code)
+		// Spawn delayed room cleanup (12-second grace period for refresh re-connections)
+		go func(code string) {
+			time.Sleep(12 * time.Second)
+			room, exists := h.roomStore.GetByCode(code)
+			if exists && len(room.Players) == 0 {
+				h.roomStore.Remove(code)
+				fmt.Printf("Room %s successfully garbage-collected due to emptiness\n", code)
+			}
+		}(currentRoom.Code)
+
 		h.sessionStore.Remove(playerId)
 		return
 	}
@@ -963,6 +1200,23 @@ func (h *WebSocketHandler) handleDisconnet(playerId string) {
 		Message:  fmt.Sprintf("%s left the lobby", player.Nickname),
 		Type:     "leave",
 	})
+
+	if currentRoom.Game != nil && currentRoom.Game.Status != "ended" && currentRoom.Game.Status != "wating" {
+		if playerId == currentRoom.Game.CurrentDrawerPlayerId {
+			if len(currentRoom.Players) > 0 {
+				currentRoom.Game.DrawerIndex = (currentRoom.Game.DrawerIndex - 1 + len(currentRoom.Players)) % len(currentRoom.Players)
+				
+				h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
+					PlayerId: "system",
+					Nickname: "System",
+					Message:  fmt.Sprintf("%s (the drawer) disconnected! Ending turn early...", player.Nickname),
+					Type:     "system",
+				})
+				
+				h.EndDrawingTurn(currentRoom)
+			}
+		}
+	}
 
 	h.sessionStore.Remove(playerId)
 }

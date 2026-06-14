@@ -1,67 +1,40 @@
+# System Architecture
+
+This document describes the high-level architecture of the **inkRush** multiplayer application.
 
 ---
 
-# 2. docs/architecture.md
+## 📐 High-Level Design
 
-```md
-# Architecture
+Communication between the frontend client and the backend server happens almost exclusively via persistent full-duplex **WebSockets**. The Gin HTTP engine is used only for initialization health checks.
 
-## High Level Design
-
-Frontend communicates with backend exclusively through WebSockets.
-
-Client
-↓
-WebSocket
-↓
-Server
-↓
-Game Engine
-↓
-Room Store
-↓
-Session Store
+```text
+  [ Client (React SPA) ]
+            ↕
+    (WebSocket /ws)
+            ↕
+  [ Server (Go / Gin / Gorilla) ]
+            ↓
+  [ WebSocket Handler / Game Engine ]
+       ↙          ↘
+[ Room Store ]  [ Session Store ]
+```
 
 ---
 
-## Components
+## 🧩 Architectural Components
 
-### Session Manager
+### 1. Ingress & Transport
+*   **Gorilla Upgrade Gateway:** Upgrades incoming HTTP connection requests to full-duplex WebSocket connections.
+*   **JSON Envelope Multiplexer:** Demarshals frames into generic envelopes, inspects event types, and triggers target sub-handler methods.
 
-Responsible for:
+### 2. Thread-Safe Repository Stores
+*   **Session Store:** Thread-safe map tracking active player details (`nickname`, `id`, `currentRoomCode`).
+*   **Room Store:** Maps room codes to their respective Game State machine data structures.
+*   **Connection Store:** Associates player IDs with active raw WebSocket connection objects for targeted event broadcasting.
 
-- Player creation
-- Session tracking
-- Connection tracking
-
-### Room Manager
-
-Responsible for:
-
-- Room creation
-- Room joining
-- Room lifecycle
-
-### Game Engine
-
-Responsible for:
-
-- Turn management
-- Word selection
-- Score calculation
-- Hint generation
-- Game completion
-
----
-
-## Data Flow
-
-session:init
-→ room:create / room:join
-→ game:start
-→ word:select
-→ turn:start
-→ draw events
-→ guess events
-→ turn:end
-→ game:end
+### 3. Game State Coordinator
+*   **Active Word Select Ticker:** Spawns a 15-second background sleep routine. If the drawer fails to select a word, a random dictionary fallback is chosen.
+*   **Turn Expiry Ticker:** Tracks the 80-second drawing turn window. Automatically ends the turn and transitions scoreboard states.
+*   **Automatic Hint Scheduler:** Orchestrates non-blocking callbacks to reveal random word letters at the 20-second, 40-second, and 60-second markers.
+*   **Drawer Exit Remediator:** Intercepts drawer disconnections, recalculates turn queues to prevent skipping players, and transitions turns immediately.

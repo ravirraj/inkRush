@@ -12,7 +12,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./client
 
     container_name: inkrush-frontend
 
@@ -20,7 +20,7 @@ services:
       - "5173:5173"
 
     env_file:
-      - ./frontend/.env
+      - ./client/.env
 
     depends_on:
       - backend

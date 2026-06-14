@@ -25,5 +25,6 @@ const (
 	EventTurnEnded     = "turn:ended"
 	EventGameReset     = "game:reset"
 	EventHintReveal    = "hint:reveal"
+	EventSessionReconnect = "session:reconnect"
 )
 
