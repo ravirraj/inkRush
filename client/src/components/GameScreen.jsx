@@ -7,7 +7,7 @@ function GameScreen({ payload }) {
     onStartGame,
     onDrawStrokeRef,
     onDrawClearRef,
-    wsRef,
+    sendEvent,
     playerID,
     chatMessages,
     wordOptions,
@@ -19,8 +19,8 @@ function GameScreen({ payload }) {
 
   const canvasRef = useRef(null);
   const chatEndRef = useRef(null);
-  const strokeHistoryRef = useRef([]);  // undo: array of stroke batches
-  const currentBatchRef = useRef([]);   // undo: current stroke batch in progress
+  const strokeHistoryRef = useRef([]); // undo: array of stroke batches
+  const currentBatchRef = useRef([]); // undo: current stroke batch in progress
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [prevCoord, setPrevCoord] = useState(null);
@@ -36,8 +36,8 @@ function GameScreen({ payload }) {
 
   // Fix: look up the drawer's nickname from room.players instead of showing raw player ID
   const drawerNickname =
-    room?.players?.find((p) => p.playerId === game?.currentDrawerPlayerId)?.nickname ||
-    "—";
+    room?.players?.find((p) => p.playerId === game?.currentDrawerPlayerId)
+      ?.nickname || "—";
 
   // Computed display word: drawer sees real word, correct guesser sees revealed word, others see masked
   const displayedWord = (() => {
@@ -79,7 +79,8 @@ function GameScreen({ payload }) {
     : 0;
 
   const transitionDuration = turnSummary?.duration || 8;
-  const transitionProgress = timeLeft !== null ? (timeLeft / transitionDuration) * 100 : 0;
+  const transitionProgress =
+    timeLeft !== null ? (timeLeft / transitionDuration) * 100 : 0;
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -104,7 +105,10 @@ function GameScreen({ payload }) {
     setTimeLeft(duration);
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev === null || prev <= 1) { clearInterval(interval); return 0; }
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
@@ -214,7 +218,12 @@ function GameScreen({ payload }) {
     if (!coords) return;
     setIsDrawing(true);
     currentBatchRef.current = [];
-    setPrevCoord({ x: coords.x, y: coords.y, normalizedX: coords.normalizedX, normalizedY: coords.normalizedY });
+    setPrevCoord({
+      x: coords.x,
+      y: coords.y,
+      normalizedX: coords.normalizedX,
+      normalizedY: coords.normalizedY,
+    });
   };
 
   const handleDraw = (e) => {
@@ -225,39 +234,57 @@ function GameScreen({ payload }) {
     const canvas = canvasRef.current;
     if (canvas) {
       drawSegment(canvas.getContext("2d"), {
-        prevX: prevCoord.x, prevY: prevCoord.y,
-        currX: coords.x, currY: coords.y,
-        color: brushColor, lineWidth: brushSize, isEraser: isEraserMode,
+        prevX: prevCoord.x,
+        prevY: prevCoord.y,
+        currX: coords.x,
+        currY: coords.y,
+        color: brushColor,
+        lineWidth: brushSize,
+        isEraser: isEraserMode,
       });
     }
 
     // Store segment for undo replay (local canvas coords + normalized for broadcast)
     currentBatchRef.current.push({
-      prevX: prevCoord.x, prevY: prevCoord.y,
-      currX: coords.x, currY: coords.y,
-      normPrevX: prevCoord.normalizedX, normPrevY: prevCoord.normalizedY,
-      normCurrX: coords.normalizedX, normCurrY: coords.normalizedY,
-      color: brushColor, lineWidth: brushSize, isEraser: isEraserMode,
+      prevX: prevCoord.x,
+      prevY: prevCoord.y,
+      currX: coords.x,
+      currY: coords.y,
+      normPrevX: prevCoord.normalizedX,
+      normPrevY: prevCoord.normalizedY,
+      normCurrX: coords.normalizedX,
+      normCurrY: coords.normalizedY,
+      color: brushColor,
+      lineWidth: brushSize,
+      isEraser: isEraserMode,
     });
 
-    if (wsRef?.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: "draw:stroke",
-        payload: {
-          playerId: playerID,
-          prevX: prevCoord.normalizedX, prevY: prevCoord.normalizedY,
-          currentX: coords.normalizedX, currentY: coords.normalizedY,
-          color: brushColor, lineWidth: brushSize, isEraser: isEraserMode,
-        },
-      }));
-    }
+    console.log("SENDING DRAW via sendEvent");
+    sendEvent("draw:stroke", {
+      playerId: playerID,
+      prevX: prevCoord.normalizedX,
+      prevY: prevCoord.normalizedY,
+      currentX: coords.normalizedX,
+      currentY: coords.normalizedY,
+      color: brushColor,
+      lineWidth: brushSize,
+      isEraser: isEraserMode,
+    });
 
-    setPrevCoord({ x: coords.x, y: coords.y, normalizedX: coords.normalizedX, normalizedY: coords.normalizedY });
+    setPrevCoord({
+      x: coords.x,
+      y: coords.y,
+      normalizedX: coords.normalizedX,
+      normalizedY: coords.normalizedY,
+    });
   };
 
   const handleEndDraw = () => {
     if (currentBatchRef.current.length > 0) {
-      strokeHistoryRef.current = [...strokeHistoryRef.current, [...currentBatchRef.current]];
+      strokeHistoryRef.current = [
+        ...strokeHistoryRef.current,
+        [...currentBatchRef.current],
+      ];
       currentBatchRef.current = [];
     }
     setIsDrawing(false);
@@ -278,27 +305,24 @@ function GameScreen({ payload }) {
       for (const seg of batch) drawSegment(ctx, seg);
     }
 
-    if (wsRef?.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "draw:clear", payload: { playerId: playerID } }));
-      // Re-broadcast remaining strokes after clear arrives
-      setTimeout(() => {
-        for (const batch of strokeHistoryRef.current) {
-          for (const seg of batch) {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({
-                type: "draw:stroke",
-                payload: {
-                  playerId: playerID,
-                  prevX: seg.normPrevX, prevY: seg.normPrevY,
-                  currentX: seg.normCurrX, currentY: seg.normCurrY,
-                  color: seg.color, lineWidth: seg.lineWidth, isEraser: seg.isEraser,
-                },
-              }));
-            }
-          }
+    sendEvent("draw:clear", { playerId: playerID });
+    // Re-broadcast remaining strokes after clear arrives
+    setTimeout(() => {
+      for (const batch of strokeHistoryRef.current) {
+        for (const seg of batch) {
+          sendEvent("draw:stroke", {
+            playerId: playerID,
+            prevX: seg.normPrevX,
+            prevY: seg.normPrevY,
+            currentX: seg.normCurrX,
+            currentY: seg.normCurrY,
+            color: seg.color,
+            lineWidth: seg.lineWidth,
+            isEraser: seg.isEraser,
+          });
         }
-      }, 60);
-    }
+      }
+    }, 60);
   };
 
   // ── Clear board ─────────────────────────────────────────────────────────────
@@ -310,66 +334,108 @@ function GameScreen({ payload }) {
     }
     strokeHistoryRef.current = [];
     currentBatchRef.current = [];
-    if (wsRef?.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "draw:clear", payload: { playerId: playerID } }));
-    }
+    sendEvent("draw:clear", { playerId: playerID });
   };
 
   // ── Chat / guess send ───────────────────────────────────────────────────────
   const handleSendChat = (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    if (wsRef?.current?.readyState === WebSocket.OPEN) {
-      if (gameStatus === "in_progress" && !isDrawer) {
-        wsRef.current.send(JSON.stringify({ type: "guess:submit", payload: { playerId: playerID, guess: chatInput } }));
-      } else {
-        wsRef.current.send(JSON.stringify({ type: "chat:message", payload: { playerId: playerID, message: chatInput } }));
-      }
+    if (gameStatus === "in_progress" && !isDrawer) {
+      sendEvent("guess:submit", { playerId: playerID, guess: chatInput });
+    } else {
+      sendEvent("chat:message", { playerId: playerID, message: chatInput });
     }
     setChatInput("");
   };
 
   const handleSelectWord = (word) => {
-    if (wsRef?.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "word:select", payload: { playerId: playerID, word } }));
-    }
+    sendEvent("word:select", { playerId: playerID, word });
   };
 
   const handlePlayAgain = () => {
-    if (wsRef?.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "game:reset", payload: { playerId: playerID } }));
-    }
+    sendEvent("game:reset", { playerId: playerID });
   };
 
   // ── Color palette definition ────────────────────────────────────────────────
-  const COLORS = ["#000000", "#ff006e", "#00ffff", "#0080ff", "#4caf50", "#ffd700", "#5d34d0", "#ff6b00"];
+  const COLORS = [
+    "#000000",
+    "#ff006e",
+    "#00ffff",
+    "#0080ff",
+    "#4caf50",
+    "#ffd700",
+    "#5d34d0",
+    "#ff6b00",
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-
       {/* ═══ TOP HUD BAR ═════════════════════════════════════════════════════ */}
       <div className="retro-card" style={{ padding: "1.5rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1.5rem" }}>
-
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "1.5rem",
+          }}
+        >
           {/* Logo */}
           <div style={{ display: "flex", alignItems: "center" }}>
-            <span className="glitch-logo" style={{ fontSize: "1.8rem", margin: 0, paddingRight: "1.5rem", borderRight: "1.5px solid rgba(0, 128, 255, 0.25)", display: "inline-block" }}>
+            <span
+              className="glitch-logo"
+              style={{
+                fontSize: "1.8rem",
+                margin: 0,
+                paddingRight: "1.5rem",
+                borderRight: "1.5px solid rgba(0, 128, 255, 0.25)",
+                display: "inline-block",
+              }}
+            >
               inkRush
             </span>
           </div>
 
           {/* Match state badge + round */}
           <div>
-            <span className="form-label" style={{ fontSize: "0.75rem", color: "var(--metallic-silver)" }}>Match State</span>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
-              <span style={{
-                backgroundColor: gameStatus === "in_progress" ? "rgba(0, 255, 255, 0.15)" : "rgba(255, 0, 110, 0.15)",
-                border: `1.5px solid ${gameStatus === "in_progress" ? "var(--cyan)" : "var(--hot-pink)"}`,
-                color: gameStatus === "in_progress" ? "var(--cyan)" : "var(--hot-pink)",
-                textShadow: gameStatus === "in_progress" ? "var(--shadow-cyan)" : "var(--shadow-pink)",
-                padding: "0.25rem 0.75rem", borderRadius: "4px", fontSize: "0.85rem",
-                fontWeight: "bold", textTransform: "uppercase"
-              }}>
+            <span
+              className="form-label"
+              style={{ fontSize: "0.75rem", color: "var(--metallic-silver)" }}
+            >
+              Match State
+            </span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                marginTop: "0.25rem",
+              }}
+            >
+              <span
+                style={{
+                  backgroundColor:
+                    gameStatus === "in_progress"
+                      ? "rgba(0, 255, 255, 0.15)"
+                      : "rgba(255, 0, 110, 0.15)",
+                  border: `1.5px solid ${gameStatus === "in_progress" ? "var(--cyan)" : "var(--hot-pink)"}`,
+                  color:
+                    gameStatus === "in_progress"
+                      ? "var(--cyan)"
+                      : "var(--hot-pink)",
+                  textShadow:
+                    gameStatus === "in_progress"
+                      ? "var(--shadow-cyan)"
+                      : "var(--shadow-pink)",
+                  padding: "0.25rem 0.75rem",
+                  borderRadius: "4px",
+                  fontSize: "0.85rem",
+                  fontWeight: "bold",
+                  textTransform: "uppercase",
+                }}
+              >
                 {gameStatus.replace(/_/g, " ")}
               </span>
               <span style={{ fontSize: "0.9rem", opacity: 0.8 }}>
@@ -381,13 +447,26 @@ function GameScreen({ payload }) {
           {/* Countdown timer (only during active phases, not transition) */}
           {timeLeft !== null && gameStatus !== "turn_transition" && (
             <div style={{ textAlign: "center" }}>
-              <span className="form-label" style={{ fontSize: "0.75rem", color: "var(--metallic-silver)" }}>Time Remaining</span>
-              <div style={{
-                fontSize: "1.8rem", fontWeight: "bold", marginTop: "0.25rem",
-                color: timeLeft <= 10 ? "var(--hot-pink)" : "var(--cyan)",
-                textShadow: timeLeft <= 10 ? "var(--shadow-pink)" : "var(--shadow-cyan)",
-                animation: timeLeft <= 10 ? "flicker 0.5s infinite alternate" : "none"
-              }}>
+              <span
+                className="form-label"
+                style={{ fontSize: "0.75rem", color: "var(--metallic-silver)" }}
+              >
+                Time Remaining
+              </span>
+              <div
+                style={{
+                  fontSize: "1.8rem",
+                  fontWeight: "bold",
+                  marginTop: "0.25rem",
+                  color: timeLeft <= 10 ? "var(--hot-pink)" : "var(--cyan)",
+                  textShadow:
+                    timeLeft <= 10
+                      ? "var(--shadow-pink)"
+                      : "var(--shadow-cyan)",
+                  animation:
+                    timeLeft <= 10 ? "flicker 0.5s infinite alternate" : "none",
+                }}
+              >
                 {timeLeft}s
               </div>
             </div>
@@ -396,7 +475,10 @@ function GameScreen({ payload }) {
           {/* Word display — different for drawer / correct guesser / active guesser */}
           {gameStatus === "in_progress" && (
             <div style={{ textAlign: "center" }}>
-              <span className="form-label" style={{ fontSize: "0.75rem", color: "var(--metallic-silver)" }}>
+              <span
+                className="form-label"
+                style={{ fontSize: "0.75rem", color: "var(--metallic-silver)" }}
+              >
                 {isDrawer
                   ? "Your Word"
                   : hasGuessedCorrectly
@@ -405,32 +487,42 @@ function GameScreen({ payload }) {
                       ? `Hint: ${letterCount + revealedLetterCount} letters · ${revealedLetterCount} revealed`
                       : `Guess the Word · ${letterCount} letters`}
               </span>
-              <div style={{
-                fontSize: "1.4rem",
-                color: "var(--cyan)",
-                textShadow: "var(--shadow-cyan)",
-                letterSpacing: "0.25rem",
-                fontWeight: "bold",
-                marginTop: "0.25rem",
-                fontFamily: "var(--font-mono)",
-                transition: "all 0.3s ease",
-              }}>
+              <div
+                style={{
+                  fontSize: "1.4rem",
+                  color: "var(--cyan)",
+                  textShadow: "var(--shadow-cyan)",
+                  letterSpacing: "0.25rem",
+                  fontWeight: "bold",
+                  marginTop: "0.25rem",
+                  fontFamily: "var(--font-mono)",
+                  transition: "all 0.3s ease",
+                }}
+              >
                 {formattedDisplayWord}
               </div>
               {/* Hint flash: show a subtle "💡 Hint!" pill when a letter was just revealed */}
               {!isDrawer && revealedLetterCount > 0 && !hasGuessedCorrectly && (
-                <div style={{
-                  fontSize: "0.72rem",
-                  color: "var(--hot-pink)",
-                  textShadow: "var(--shadow-pink)",
-                  marginTop: "0.2rem",
-                  animation: "flicker 1.5s ease-out"
-                }}>
+                <div
+                  style={{
+                    fontSize: "0.72rem",
+                    color: "var(--hot-pink)",
+                    textShadow: "var(--shadow-pink)",
+                    marginTop: "0.2rem",
+                    animation: "flicker 1.5s ease-out",
+                  }}
+                >
                   💡 Hint revealed!
                 </div>
               )}
               {hasGuessedCorrectly && !isDrawer && (
-                <div style={{ fontSize: "0.75rem", color: "rgba(192,192,192,0.6)", marginTop: "0.15rem" }}>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "rgba(192,192,192,0.6)",
+                    marginTop: "0.15rem",
+                  }}
+                >
                   Waiting for others...
                 </div>
               )}
@@ -440,20 +532,40 @@ function GameScreen({ payload }) {
           {/* Host start / drawer info */}
           <div>
             {isHost && gameStatus === "wating" && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem" }}>
-                <button className="btn btn-primary" onClick={onStartGame} disabled={room.players.length < 3}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: "0.5rem",
+                }}
+              >
+                <button
+                  className="btn btn-primary"
+                  onClick={onStartGame}
+                  disabled={room.players.length < 3}
+                >
                   Start Game
                 </button>
                 {room.players.length < 3 && (
-                  <span style={{ fontSize: "0.8rem", color: "var(--hot-pink)", textShadow: "var(--shadow-pink)" }}>
+                  <span
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "var(--hot-pink)",
+                      textShadow: "var(--shadow-pink)",
+                    }}
+                  >
                     Need at least 3 players
                   </span>
                 )}
               </div>
             )}
             {gameStatus !== "wating" && gameStatus !== "ended" && (
-              <div style={{ fontSize: "0.9rem", opacity: 0.8, textAlign: "right" }}>
-                Drawer: <span style={{ color: "var(--hot-pink)", fontWeight: "bold" }}>
+              <div
+                style={{ fontSize: "0.9rem", opacity: 0.8, textAlign: "right" }}
+              >
+                Drawer:{" "}
+                <span style={{ color: "var(--hot-pink)", fontWeight: "bold" }}>
                   {isDrawer ? "YOU" : drawerNickname}
                 </span>
               </div>
@@ -463,45 +575,87 @@ function GameScreen({ payload }) {
       </div>
 
       {/* ═══ MAIN WORKSPACE ══════════════════════════════════════════════════ */}
-      <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "stretch" }}>
-
+      <div
+        style={{
+          display: "flex",
+          gap: "1.5rem",
+          flexWrap: "wrap",
+          alignItems: "stretch",
+        }}
+      >
         {/* ─── WAITING ROOM PLACEHOLDER ─────────────────────────────────────── */}
         {gameStatus === "wating" && (
-          <div className="retro-card" style={{
-            flex: "3 1 1000px", minWidth: "320px", minHeight: "420px",
-            display: "flex", flexDirection: "column", justifyContent: "center",
-            alignItems: "center", gap: "1.5rem",
-            backgroundColor: "rgba(11, 11, 22, 0.4)", textAlign: "center"
-          }}>
-            <div style={{
-              fontSize: "clamp(2rem, 4vw, 3rem)", color: "var(--hot-pink)",
-              textShadow: "var(--shadow-pink)", animation: "flicker 2s infinite alternate",
-              fontFamily: "var(--font-mono)", letterSpacing: "0.1rem"
-            }}>
+          <div
+            className="retro-card"
+            style={{
+              flex: "3 1 1000px",
+              minWidth: "320px",
+              minHeight: "420px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "1.5rem",
+              backgroundColor: "rgba(11, 11, 22, 0.4)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(2rem, 4vw, 3rem)",
+                color: "var(--hot-pink)",
+                textShadow: "var(--shadow-pink)",
+                animation: "flicker 2s infinite alternate",
+                fontFamily: "var(--font-mono)",
+                letterSpacing: "0.1rem",
+              }}
+            >
               STAND BY
             </div>
-            <p style={{ color: "var(--metallic-silver)", fontSize: "1rem", maxWidth: "380px", lineHeight: 1.8 }}>
+            <p
+              style={{
+                color: "var(--metallic-silver)",
+                fontSize: "1rem",
+                maxWidth: "380px",
+                lineHeight: 1.8,
+              }}
+            >
               {isHost
                 ? "You are the host. Share the invite link with friends, then click Start Game when everyone has joined."
-                : `Waiting for ${room?.players?.find(p => p.playerId === room.hostPlayerID)?.nickname || "the host"} to start the match...`}
+                : `Waiting for ${room?.players?.find((p) => p.playerId === room.hostPlayerID)?.nickname || "the host"} to start the match...`}
             </p>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <div
+              style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}
+            >
               {[0, 1, 2].map((i) => (
-                <div key={i} style={{
-                  width: "10px", height: "10px", borderRadius: "50%",
-                  backgroundColor: "var(--cyan)", boxShadow: "var(--shadow-cyan)",
-                  animation: `flicker ${0.8 + i * 0.3}s ${i * 0.25}s infinite alternate`,
-                }} />
+                <div
+                  key={i}
+                  style={{
+                    width: "10px",
+                    height: "10px",
+                    borderRadius: "50%",
+                    backgroundColor: "var(--cyan)",
+                    boxShadow: "var(--shadow-cyan)",
+                    animation: `flicker ${0.8 + i * 0.3}s ${i * 0.25}s infinite alternate`,
+                  }}
+                />
               ))}
             </div>
             {isHost && room && (
-              <div style={{
-                border: "1.5px solid rgba(0, 128, 255, 0.3)", borderRadius: "0.5rem",
-                padding: "0.75rem 1.5rem", color: "var(--neon-blue)", fontSize: "0.85rem"
-              }}>
+              <div
+                style={{
+                  border: "1.5px solid rgba(0, 128, 255, 0.3)",
+                  borderRadius: "0.5rem",
+                  padding: "0.75rem 1.5rem",
+                  color: "var(--neon-blue)",
+                  fontSize: "0.85rem",
+                }}
+              >
                 {room.players.length} / ∞ players connected
                 {room.players.length < 3 && (
-                  <span style={{ color: "var(--hot-pink)", marginLeft: "0.5rem" }}>
+                  <span
+                    style={{ color: "var(--hot-pink)", marginLeft: "0.5rem" }}
+                  >
                     — need {3 - room.players.length} more
                   </span>
                 )}
@@ -512,189 +666,485 @@ function GameScreen({ payload }) {
 
         {/* ─── GAME ACTIVE AREA ──────────────────────────────────────────────── */}
         {gameStatus !== "wating" && (
-          <div style={{ flex: "3 1 1000px", minWidth: "320px", display: "flex", flexDirection: "column", gap: "1rem" }}>
-
+          <div
+            style={{
+              flex: "3 1 1000px",
+              minWidth: "320px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1rem",
+            }}
+          >
             {/* WORD SELECTION */}
             {gameStatus === "selecting_word" ? (
-              <div className="retro-card" style={{
-                height: "400px", display: "flex", flexDirection: "column",
-                justifyContent: "center", alignItems: "center",
-                backgroundColor: "rgba(11, 11, 22, 0.4)", textAlign: "center"
-              }}>
+              <div
+                className="retro-card"
+                style={{
+                  height: "400px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  backgroundColor: "rgba(11, 11, 22, 0.4)",
+                  textAlign: "center",
+                }}
+              >
                 {isDrawer ? (
                   <div>
-                    <h3 style={{ marginBottom: "1.5rem" }}>Choose a word to draw</h3>
-                    <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center" }}>
-                      {wordOptions && wordOptions.map((word) => (
-                        <button key={word} className="btn btn-secondary"
-                          onClick={() => handleSelectWord(word)}
-                          style={{ padding: "1rem 2rem", fontSize: "1.1rem" }}>
-                          {word}
-                        </button>
-                      ))}
+                    <h3 style={{ marginBottom: "1.5rem" }}>
+                      Choose a word to draw
+                    </h3>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "1rem",
+                        flexWrap: "wrap",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {wordOptions &&
+                        wordOptions.map((word) => (
+                          <button
+                            key={word}
+                            className="btn btn-secondary"
+                            onClick={() => handleSelectWord(word)}
+                            style={{ padding: "1rem 2rem", fontSize: "1.1rem" }}
+                          >
+                            {word}
+                          </button>
+                        ))}
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: "1rem", color: "var(--metallic-silver)", marginBottom: "1.25rem" }}>
-                      <span style={{ color: "var(--hot-pink)", fontWeight: "bold" }}>{drawerNickname}</span> is choosing a word...
+                    <div
+                      style={{
+                        fontSize: "1rem",
+                        color: "var(--metallic-silver)",
+                        marginBottom: "1.25rem",
+                      }}
+                    >
+                      <span
+                        style={{ color: "var(--hot-pink)", fontWeight: "bold" }}
+                      >
+                        {drawerNickname}
+                      </span>{" "}
+                      is choosing a word...
                     </div>
-                    <div style={{ animation: "flicker 1.5s infinite alternate", fontSize: "1.2rem", color: "var(--hot-pink)", textShadow: "var(--shadow-pink)" }}>
+                    <div
+                      style={{
+                        animation: "flicker 1.5s infinite alternate",
+                        fontSize: "1.2rem",
+                        color: "var(--hot-pink)",
+                        textShadow: "var(--shadow-pink)",
+                      }}
+                    >
                       GET READY
                     </div>
                   </div>
                 )}
               </div>
-
             ) : gameStatus === "turn_transition" ? (
               /* TURN TRANSITION SCOREBOARD */
-              <div className="retro-card" style={{
-                minHeight: "400px", display: "flex", flexDirection: "column",
-                justifyContent: "center", alignItems: "center",
-                backgroundColor: "rgba(11, 11, 22, 0.4)", fontFamily: "var(--font-mono)"
-              }}>
+              <div
+                className="retro-card"
+                style={{
+                  minHeight: "400px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  backgroundColor: "rgba(11, 11, 22, 0.4)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
                 <h3 style={{ marginBottom: "0.5rem" }}>Round Summary</h3>
-                <h4 style={{ margin: "0.5rem 0", color: "var(--metallic-silver)", textShadow: "none" }}>
-                  The word was: <span style={{ color: "var(--cyan)", textShadow: "var(--shadow-cyan)", fontSize: "1.6rem" }}>{turnSummary?.correctWord}</span>
+                <h4
+                  style={{
+                    margin: "0.5rem 0",
+                    color: "var(--metallic-silver)",
+                    textShadow: "none",
+                  }}
+                >
+                  The word was:{" "}
+                  <span
+                    style={{
+                      color: "var(--cyan)",
+                      textShadow: "var(--shadow-cyan)",
+                      fontSize: "1.6rem",
+                    }}
+                  >
+                    {turnSummary?.correctWord}
+                  </span>
                 </h4>
 
-                <div style={{
-                  margin: "1.5rem 0", width: "100%", maxWidth: "360px",
-                  border: "1.5px solid var(--neon-blue)", borderRadius: "0.5rem",
-                  padding: "1rem", backgroundColor: "rgba(11, 11, 22, 0.6)"
-                }}>
-                  <div style={{
-                    display: "flex", justifyContent: "space-between",
-                    borderBottom: "1px solid rgba(0, 128, 255, 0.2)",
-                    paddingBottom: "0.25rem", marginBottom: "0.5rem"
-                  }}>
-                    <span className="form-label" style={{ margin: 0 }}>Player</span>
+                <div
+                  style={{
+                    margin: "1.5rem 0",
+                    width: "100%",
+                    maxWidth: "360px",
+                    border: "1.5px solid var(--neon-blue)",
+                    borderRadius: "0.5rem",
+                    padding: "1rem",
+                    backgroundColor: "rgba(11, 11, 22, 0.6)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      borderBottom: "1px solid rgba(0, 128, 255, 0.2)",
+                      paddingBottom: "0.25rem",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <span className="form-label" style={{ margin: 0 }}>
+                      Player
+                    </span>
                     <div style={{ display: "flex", gap: "1rem" }}>
-                      <span className="form-label" style={{ margin: 0 }}>Gained</span>
-                      <span className="form-label" style={{ margin: 0, minWidth: "60px", textAlign: "right" }}>Total</span>
+                      <span className="form-label" style={{ margin: 0 }}>
+                        Gained
+                      </span>
+                      <span
+                        className="form-label"
+                        style={{
+                          margin: 0,
+                          minWidth: "60px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Total
+                      </span>
                     </div>
                   </div>
-                  {room && [...(room.players || [])]
-                    .sort((a, b) => (turnSummary?.totalScores?.[b.playerId] || 0) - (turnSummary?.totalScores?.[a.playerId] || 0))
-                    .map((p) => {
-                      const points = turnSummary?.gainedPoints?.[p.playerId] || 0;
-                      const total = turnSummary?.totalScores?.[p.playerId] || 0;
-                      return (
-                        <div key={p.playerId} style={{
-                          display: "flex", justifyContent: "space-between",
-                          alignItems: "center", margin: "0.4rem 0", fontSize: "0.95rem"
-                        }}>
-                          <span>{p.nickname}</span>
-                          <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-                            <span style={{
-                              fontWeight: "bold", fontSize: "0.85rem", width: "35px", textAlign: "right",
-                              color: points > 0 ? "var(--hot-pink)" : "rgba(192, 192, 192, 0.4)",
-                              textShadow: points > 0 ? "var(--shadow-pink)" : "none",
-                            }}>
-                              {points > 0 ? `+${points}` : "0"}
-                            </span>
-                            <span style={{
-                              fontWeight: "bold", minWidth: "60px", textAlign: "right",
-                              color: "var(--cyan)", textShadow: "var(--shadow-cyan)",
-                            }}>
-                              {total} pts
-                            </span>
+                  {room &&
+                    [...(room.players || [])]
+                      .sort(
+                        (a, b) =>
+                          (turnSummary?.totalScores?.[b.playerId] || 0) -
+                          (turnSummary?.totalScores?.[a.playerId] || 0),
+                      )
+                      .map((p) => {
+                        const points =
+                          turnSummary?.gainedPoints?.[p.playerId] || 0;
+                        const total =
+                          turnSummary?.totalScores?.[p.playerId] || 0;
+                        return (
+                          <div
+                            key={p.playerId}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              margin: "0.4rem 0",
+                              fontSize: "0.95rem",
+                            }}
+                          >
+                            <span>{p.nickname}</span>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "1rem",
+                                alignItems: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontWeight: "bold",
+                                  fontSize: "0.85rem",
+                                  width: "35px",
+                                  textAlign: "right",
+                                  color:
+                                    points > 0
+                                      ? "var(--hot-pink)"
+                                      : "rgba(192, 192, 192, 0.4)",
+                                  textShadow:
+                                    points > 0 ? "var(--shadow-pink)" : "none",
+                                }}
+                              >
+                                {points > 0 ? `+${points}` : "0"}
+                              </span>
+                              <span
+                                style={{
+                                  fontWeight: "bold",
+                                  minWidth: "60px",
+                                  textAlign: "right",
+                                  color: "var(--cyan)",
+                                  textShadow: "var(--shadow-cyan)",
+                                }}
+                              >
+                                {total} pts
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                </div>
-
-                {/* Transition countdown bar */}
-                <div style={{ width: "100%", maxWidth: "360px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
-                    <p style={{ fontSize: "0.85rem", color: "var(--metallic-silver)", margin: 0 }}>
-                      Next drawer: <span style={{ color: "var(--hot-pink)", fontWeight: "bold" }}>{turnSummary?.nextDrawerNickname}</span>
-                    </p>
-                    <span style={{ fontSize: "0.8rem", color: "rgba(192,192,192,0.5)" }}>{timeLeft}s</span>
+                        );
+                      })}
                   </div>
-                  <div style={{
-                    background: "rgba(0, 128, 255, 0.12)", borderRadius: "4px",
-                    height: "5px", overflow: "hidden", border: "1px solid rgba(0, 128, 255, 0.2)"
-                  }}>
-                    <div style={{
-                      background: "var(--cyan)", boxShadow: "var(--shadow-cyan)",
-                      height: "100%", borderRadius: "4px",
-                      width: `${transitionProgress}%`, transition: "width 1s linear"
-                    }} />
+
+                  {/* Transition countdown bar */}
+                  <div style={{ width: "100%", maxWidth: "360px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "0.4rem",
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--metallic-silver)",
+                          margin: 0,
+                        }}
+                      >
+                        Next drawer:{" "}
+                        <span
+                          style={{ color: "var(--hot-pink)", fontWeight: "bold" }}
+                        >
+                          {turnSummary?.nextDrawerNickname}
+                        </span>
+                      </p>
+                      <span
+                        style={{
+                          fontSize: "0.8rem",
+                          color: "rgba(192,192,192,0.5)",
+                        }}
+                      >
+                        {timeLeft}s
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        background: "rgba(0, 128, 255, 0.12)",
+                        borderRadius: "4px",
+                        height: "5px",
+                        overflow: "hidden",
+                        border: "1px solid rgba(0, 128, 255, 0.2)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          background: "var(--cyan)",
+                          boxShadow: "var(--shadow-cyan)",
+                          height: "100%",
+                          borderRadius: "4px",
+                          width: `${transitionProgress}%`,
+                          transition: "width 1s linear",
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-
-            ) : gameStatus === "ended" ? (
-              /* GAME OVER */
-              <div className="retro-card" style={{
-                minHeight: "400px", display: "flex", flexDirection: "column",
-                justifyContent: "center", alignItems: "center",
-                backgroundColor: "rgba(11, 11, 22, 0.4)", fontFamily: "var(--font-mono)"
-              }}>
-                <h2 style={{ color: "var(--hot-pink)", textShadow: "var(--shadow-pink)", border: "none", marginBottom: "0.5rem" }}>
-                  GAME OVER
-                </h2>
-                {gameSummary?.winners && (
-                  <h3 style={{ margin: "0.5rem 0", color: "var(--gold)", textShadow: "0 0 10px rgba(255, 215, 0, 0.5)", fontSize: "1.6rem" }}>
-                    WINNER: {gameSummary.winners.join(", ")}
-                  </h3>
-                )}
-                <div style={{
-                  margin: "1.5rem 0", width: "100%", maxWidth: "400px",
-                  border: "1.5px solid var(--neon-blue)", borderRadius: "0.5rem",
-                  padding: "1rem", backgroundColor: "rgba(11, 11, 22, 0.6)"
-                }}>
-                  <span className="form-label" style={{
-                    display: "block", borderBottom: "1px solid rgba(0, 128, 255, 0.2)",
-                    paddingBottom: "0.25rem", marginBottom: "0.5rem"
-                  }}>
-                    Final Standings
-                  </span>
-                  {gameSummary?.leaderboard?.map((entry, index) => {
-                    const rankLabel = ["1st 🥇", "2nd 🥈", "3rd 🥉"][index] ?? `${index + 1}th`;
-                    const entryColor = index === 0 ? "var(--gold)" : "var(--metallic-silver)";
-                    const shadow = index === 0 ? "0 0 5px rgba(255, 215, 0, 0.3)" : "none";
-                    return (
-                      <div key={entry.playerId} style={{
-                        display: "flex", justifyContent: "space-between",
-                        padding: "0.5rem 0", borderBottom: "1px dashed rgba(192, 192, 192, 0.15)",
-                        color: entryColor, textShadow: shadow, fontWeight: index === 0 ? "bold" : "normal"
-                      }}>
-                        <span>{rankLabel} — {entry.nickname}</span>
-                        <span>{entry.score} pts</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {isHost && (
-                  <button className="btn btn-success" onClick={handlePlayAgain} style={{ marginTop: "1rem" }}>
+              ) : gameStatus === "ended" ? (
+                /* GAME OVER */
+                <div
+                  className="retro-card"
+                  style={{
+                    minHeight: "400px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    backgroundColor: "rgba(11, 11, 22, 0.4)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  <h2
+                    style={{
+                      color: "var(--hot-pink)",
+                      textShadow: "var(--shadow-pink)",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    GAME OVER
+                  </h2>
+                  <table
+                    style={{
+                      width: "80%",
+                      maxWidth: "400px",
+                      borderCollapse: "collapse",
+                      fontFamily: "var(--font-mono)",
+                      margin: "1rem 0",
+                    }}
+                  >
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--neon-blue)" }}>
+                        <th style={{ padding: "0.5rem", textAlign: "left" }}>
+                          Player
+                        </th>
+                        <th style={{ padding: "0.5rem", textAlign: "right" }}>
+                          Score
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gameSummary &&
+                        gameSummary.players &&
+                        [...gameSummary.players]
+                          .sort(
+                            (a, b) => (b.score || 0) - (a.score || 0),
+                          )
+                          .map((p, idx) => (
+                            <tr
+                              key={p.playerId}
+                              style={{
+                                borderBottom: "1px solid rgba(0, 128, 255, 0.1)",
+                              }}
+                            >
+                              <td
+                                style={{
+                                  padding: "0.5rem",
+                                  fontWeight: idx === 0 ? "bold" : "normal",
+                                  color:
+                                    idx === 0
+                                      ? "var(--hot-pink)"
+                                      : "var(--metallic-silver)",
+                                  textShadow:
+                                    idx === 0 ? "var(--shadow-pink)" : "none",
+                                }}
+                              >
+                                {idx === 0 && "🏆 "}
+                                {p.nickname}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.5rem",
+                                  textAlign: "right",
+                                  fontWeight: "bold",
+                                  color: "var(--cyan)",
+                                  textShadow: "var(--shadow-cyan)",
+                                }}
+                              >
+                                {p.score}
+                              </td>
+                            </tr>
+                          ))}
+                    </tbody>
+                  </table>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handlePlayAgain}
+                    style={{ marginTop: "1rem" }}
+                  >
                     Play Again
                   </button>
-                )}
-              </div>
+                </div>
+              ) : (
+                /* ═══ CANVAS + DRAWING TOOLS ═══════════════════════════════════ */
+                <div
+                  className="retro-card"
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "1rem",
+                    backgroundColor: "rgba(11, 11, 22, 0.4)",
+                    padding: "1rem",
+                  }}
+                >
+                  {/* Drawing tools */}
+                  <div
+                    id="draw-toolbar"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                      borderBottom: "1px solid rgba(0, 128, 255, 0.15)",
+                      paddingBottom: "0.75rem",
+                    }}
+                  >
+                    {COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setBrushColor(c)}
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "50%",
+                          border:
+                            brushColor === c
+                              ? "2px solid var(--cyan)"
+                              : "2px solid transparent",
+                          backgroundColor: c,
+                          cursor: "pointer",
+                          transition: "border 0.15s, transform 0.15s",
+                          transform:
+                            brushColor === c ? "scale(1.2)" : "scale(1)",
+                          boxShadow:
+                            brushColor === c
+                              ? "0 0 8px var(--cyan)"
+                              : "none",
+                        }}
+                      />
+                    ))}
 
-            ) : (
-              /* DRAWING CANVAS */
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {/* Canvas wrapper with GUESS MODE badge for non-drawers */}
-                <div style={{ position: "relative" }}>
+                    <div style={{ flex: 1, minWidth: "1px" }} />
+
+                    {/* Brush Size */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span
+                        className="form-label"
+                        style={{ margin: 0, fontSize: "0.75rem" }}
+                      >
+                        Size
+                      </span>
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        value={brushSize}
+                        onChange={(e) => setBrushSize(Number(e.target.value))}
+                        style={{ width: "80px" }}
+                      />
+                    </div>
+
+                    {/* Eraser toggle */}
+                    <button
+                      className={isEraserMode ? "btn btn-primary" : "btn btn-secondary"}
+                      onClick={() => setIsEraserMode((prev) => !prev)}
+                      style={{
+                        padding: "0.4rem 1rem",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {isEraserMode ? "✓ Eraser" : "Eraser"}
+                    </button>
+
+                    {/* Clear board */}
+                    <button
+                      className="btn btn-danger"
+                      onClick={handleClearCanvas}
+                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
+                    >
+                      Clear
+                    </button>
+
+                    {/* Undo */}
+                    <button
+                      className="btn btn-secondary"
+                      onClick={triggerUndo}
+                      disabled={strokeHistoryRef.current.length === 0}
+                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
+                    >
+                      Undo
+                    </button>
+                  </div>
+
+                  {/* Canvas */}
                   <canvas
                     ref={canvasRef}
                     width={1000}
-                    height={650}
+                    height={600}
                     style={{
-                      border: "1.5px solid var(--neon-blue)",
-                      boxShadow: "var(--shadow-blue)",
-                      borderRadius: "0.5rem",
-                      backgroundColor: "#fff",
-                      cursor: isDrawer ? (isEraserMode ? "cell" : "crosshair") : "default",
-                      display: "block",
                       width: "100%",
                       height: "auto",
-                      aspectRatio: "1000/650",
-                      touchAction: "none"
+                      aspectRatio: "1000 / 600",
+                      backgroundColor: "#fff",
+                      borderRadius: "0.4rem",
+                      cursor: isDrawer ? "crosshair" : "default",
+                      touchAction: "none",
                     }}
                     onMouseDown={handleStartDraw}
                     onMouseMove={handleDraw}
@@ -704,179 +1154,43 @@ function GameScreen({ payload }) {
                     onTouchMove={handleDraw}
                     onTouchEnd={handleEndDraw}
                   />
-                  {/* Subtle mode badge for non-drawers */}
-                  {!isDrawer && (
-                    <div style={{
-                      position: "absolute", top: "0.75rem", right: "0.75rem",
-                      backgroundColor: "rgba(11, 11, 22, 0.8)",
-                      border: `1px solid ${hasGuessedCorrectly ? "var(--cyan)" : "rgba(255,0,110,0.4)"}`,
-                      borderRadius: "4px", padding: "0.25rem 0.6rem",
-                      fontSize: "0.72rem",
-                      color: hasGuessedCorrectly ? "var(--cyan)" : "var(--hot-pink)",
-                      fontFamily: "var(--font-mono)", pointerEvents: "none",
-                      textShadow: hasGuessedCorrectly ? "var(--shadow-cyan)" : "var(--shadow-pink)"
-                    }}>
-                      {hasGuessedCorrectly ? "✓ GUESSED" : "● GUESS MODE"}
-                    </div>
-                  )}
                 </div>
+              )}
 
-                {/* Drawer toolbar */}
-                {isDrawer && (
-                  <div className="retro-card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "1rem" }}>
-                      {/* Color palette + eraser */}
-                      <div>
-                        <span className="form-label" style={{ fontSize: "0.75rem", marginBottom: "0.5rem", display: "block" }}>Color Palette</span>
-                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                          {COLORS.map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => { setBrushColor(color); setIsEraserMode(false); }}
-                              style={{
-                                width: "28px", height: "28px", backgroundColor: color,
-                                border: (!isEraserMode && brushColor === color) ? "2px solid #fff" : "1.5px solid rgba(192, 192, 192, 0.4)",
-                                borderRadius: "4px", cursor: "pointer",
-                                boxShadow: (!isEraserMode && brushColor === color) ? "0 0 8px rgba(255,255,255,0.8)" : "none",
-                                transform: (!isEraserMode && brushColor === color) ? "scale(1.15)" : "scale(1)",
-                                transition: "all 0.15s ease-out"
-                              }}
-                              title={color}
-                            />
-                          ))}
-                          {/* Eraser tool */}
-                          <button
-                            type="button"
-                            onClick={() => setIsEraserMode(true)}
-                            title="Eraser (removes pixels)"
-                            style={{
-                              width: "32px", height: "28px",
-                              backgroundColor: isEraserMode ? "rgba(255,255,255,0.15)" : "rgba(11,11,22,0.6)",
-                              border: isEraserMode ? "2px solid #fff" : "1.5px solid rgba(192,192,192,0.4)",
-                              borderRadius: "4px", cursor: "pointer",
-                              boxShadow: isEraserMode ? "0 0 8px rgba(255,255,255,0.8)" : "none",
-                              transform: isEraserMode ? "scale(1.15)" : "scale(1)",
-                              transition: "all 0.15s ease-out",
-                              color: "var(--metallic-silver)", fontSize: "13px",
-                              display: "flex", alignItems: "center", justifyContent: "center"
-                            }}
-                          >
-                            ⌫
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Brush size */}
-                      <div>
-                        <span className="form-label" style={{ fontSize: "0.75rem", marginBottom: "0.5rem", display: "block" }}>Brush Size</span>
-                        <div style={{ display: "flex", gap: "0.5rem" }}>
-                          {[{ label: "S", size: 3 }, { label: "M", size: 6 }, { label: "L", size: 12 }].map((b) => (
-                            <button
-                              key={b.size}
-                              type="button"
-                              className={brushSize === b.size ? "btn btn-primary" : "btn btn-secondary"}
-                              onClick={() => setBrushSize(b.size)}
-                              style={{ padding: "0.25rem 0.75rem", fontSize: "0.8rem", height: "28px", borderRadius: "4px" }}
-                            >
-                              {b.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Actions: Undo + Clear */}
-                      <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={triggerUndo}
-                          style={{ height: "32px", padding: "0 0.75rem", fontSize: "0.85rem" }}
-                          title="Undo last stroke (Ctrl+Z)"
-                        >
-                          ↩ Undo
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={handleClearCanvas}
-                          style={{ height: "32px", padding: "0 0.75rem", fontSize: "0.85rem" }}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
+              {/* CHAT + PLAYERS + WORD SELECT (during game active) */}
+              {gameStatus !== "selecting_word" &&
+                gameStatus !== "turn_transition" && (
+                  <div className="retro-card" style={{ padding: "1.25rem" }}>
+                    {/* Chat / guess input */}
+                    <form onSubmit={handleSendChat} style={{ display: "flex", gap: "0.5rem" }}>
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder={
+                          isDrawer
+                            ? "Chat with guessers..."
+                            : hasGuessedCorrectly
+                              ? "You guessed correctly!"
+                              : "Type your guess..."
+                        }
+                        className="input-retro"
+                        disabled={
+                          (gameStatus === "in_progress" && hasGuessedCorrectly) ||
+                          gameStatus === "turn_transition"
+                        }
+                      />
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                      >
+                        Send
+                      </button>
+                    </form>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ─── CHAT PANEL ────────────────────────────────────────────────────── */}
-        {gameStatus !== "wating" && (
-          <div className="retro-card" style={{
-            flex: "1 1 300px", minWidth: "250px",
-            height: "100%", maxHeight: "720px",
-            display: "flex", flexDirection: "column",
-            padding: "1.25rem", overflow: "hidden",
-            backgroundColor: "rgba(11, 11, 22, 0.6)"
-          }}>
-            <span className="form-label" style={{ borderBottom: "1.5px solid rgba(0, 128, 255, 0.2)", paddingBottom: "0.5rem", marginBottom: "0.5rem" }}>
-              Comms Feed
-            </span>
-            <div style={{
-              flex: 1, overflowY: "auto", overflowX: "hidden",
-              padding: "0.5rem", display: "flex", flexDirection: "column",
-              gap: "0.5rem", fontSize: "0.9rem", minHeight: 0
-            }}>
-              {chatMessages && chatMessages.map((msg, index) => {
-                let color = "var(--metallic-silver)";
-                let fontWeight = "normal";
-                let fontStyle = "normal";
-                if (msg.type === "system") { color = "var(--neon-blue)"; fontWeight = "bold"; }
-                else if (msg.type === "correct") { color = "var(--cyan)"; fontWeight = "bold"; }
-                else if (msg.type === "join" || msg.type === "leave") { color = "rgba(192, 192, 192, 0.5)"; fontStyle = "italic"; }
-                return (
-                  <div key={index} style={{ wordBreak: "break-word", color, fontWeight, fontStyle }}>
-                    {msg.type === "chat"
-                      ? <><strong style={{ color: "var(--hot-pink)" }}>{msg.nickname}:</strong> {msg.message}</>
-                      : msg.message}
-                  </div>
-                );
-              })}
-              <div ref={chatEndRef} />
             </div>
-
-            <form onSubmit={handleSendChat} style={{
-              display: "flex", gap: "0.5rem", marginTop: "0.75rem",
-              borderTop: "1px solid rgba(0, 128, 255, 0.15)", paddingTop: "0.75rem"
-            }}>
-              <input
-                className="retro-input"
-                type="text"
-                placeholder={
-                  isDrawer ? "Drawer cannot chat..."
-                    : hasGuessedCorrectly ? "✓ You guessed it!"
-                      : gameStatus === "in_progress" ? "Type your guess..."
-                        : "Transmit message..."
-                }
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                disabled={isDrawer || hasGuessedCorrectly}
-                style={{ flex: 1, padding: "0.5rem", fontSize: "0.9rem" }}
-              />
-              <button
-                className="btn btn-primary"
-                type="submit"
-                disabled={isDrawer || hasGuessedCorrectly}
-                style={{ padding: "0.5rem 1rem", fontSize: "0.9rem" }}
-              >
-                Send
-              </button>
-            </form>
-          </div>
-        )}
+          )}
       </div>
     </div>
   );

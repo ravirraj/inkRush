@@ -41,21 +41,27 @@ function App() {
         console.log("Session is ready");
         const newPlayer = msg.payload.playerId;
         setPlayerID(newPlayer);
-        
+
         sessionStorage.setItem("inkrush_player_id", newPlayer);
-        sessionStorage.setItem("inkrush_nickname", msg.payload.nickname || nickname);
+        sessionStorage.setItem(
+          "inkrush_nickname",
+          msg.payload.nickname || nickname,
+        );
 
         if (pendingAction.current === "create") {
           sendEvent("room:create", { playerId: newPlayer });
         }
         if (pendingAction.current === "join") {
-          sendEvent("room:join", { code: codeRef.current, playerId: newPlayer });
+          sendEvent("room:join", {
+            code: codeRef.current,
+            playerId: newPlayer,
+          });
         }
         break;
 
       case "room:ready":
         setRoom(msg.payload);
-        
+
         sessionStorage.setItem("inkrush_room_code", msg.payload.code);
 
         if (!game || game.status === "wating") {
@@ -103,7 +109,11 @@ function App() {
 
       case "system:error":
         setError(msg.payload.ErrorMessage);
-        if (msg.payload.ErrorMessage.includes("invalid") || msg.payload.ErrorMessage.includes("does not exist") || msg.payload.ErrorMessage.includes("Not Present")) {
+        if (
+          msg.payload.ErrorMessage.includes("invalid") ||
+          msg.payload.ErrorMessage.includes("does not exist") ||
+          msg.payload.ErrorMessage.includes("Not Present")
+        ) {
           sessionStorage.removeItem("inkrush_room_code");
           sessionStorage.removeItem("inkrush_player_id");
           sessionStorage.removeItem("inkrush_nickname");
@@ -151,6 +161,7 @@ function App() {
         break;
 
       case "draw:stroke":
+        console.log("RECEIVED DRAW", msg.payload);
         if (onDrawStrokeRef.current) {
           onDrawStrokeRef.current(msg.payload);
         }
@@ -181,7 +192,10 @@ function App() {
     }
   };
 
-  const { sendEvent, ws, isOpen } = useWebSocket(import.meta.env.VITE_WS_URL, handleWebSocketEvent);
+  const { sendEvent, ws, isOpen } = useWebSocket(
+    import.meta.env.VITE_WS_URL,
+    handleWebSocketEvent,
+  );
 
   // Sync the raw ws Ref and trigger reconnection if saved state exists and socket is fully OPEN
   useEffect(() => {
@@ -201,7 +215,7 @@ function App() {
         sendEvent("session:reconnect", {
           playerId: savedPlayerID,
           nickname: savedNickname,
-          code: savedRoomCode || ""
+          code: savedRoomCode || "",
         });
       }
     }
@@ -236,17 +250,35 @@ function App() {
   return (
     <div className="app-terminal">
       {room ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
+        >
           <GameScreen
-            payload={{ room, game, onStartGame, guess, setGuess, onSubmitGuess, onDrawStrokeRef, onDrawClearRef, wsRef, playerID, chatMessages, wordOptions, turnSummary, gameSummary, hasGuessedCorrectly, revealedWord }}
+            payload={{
+              room,
+              game,
+              onStartGame,
+              guess,
+              setGuess,
+              onSubmitGuess,
+              onDrawStrokeRef,
+              onDrawClearRef,
+              wsRef,
+              sendEvent,
+              playerID,
+              chatMessages,
+              wordOptions,
+              turnSummary,
+              gameSummary,
+              hasGuessedCorrectly,
+              revealedWord,
+            }}
           />
           <Lobby room={room} />
         </div>
       ) : (
         <>
-          <header className="glitch-logo">
-            inkRush
-          </header>
+          <header className="glitch-logo">inkRush</header>
           <HomeScreen
             payload={{
               nickname,

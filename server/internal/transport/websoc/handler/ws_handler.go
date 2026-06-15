@@ -89,7 +89,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			messageCount = 0
 		}
 		messageCount++
-		if messageCount > 25 {
+		if messageCount > 10000 {
 			errPayload := protocol.ErrorPayload{
 				ErrorMessage: "Rate limit exceeded. Slow down!",
 			}
@@ -140,7 +140,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				SendEnvelope(conn, protocol.EventSystemError, errPaylaod)
 				continue
 			}
-			
+
 			// Use cryptographically secure token
 			playerId := sessionInitPaylaod.Nickname + "_" + generateSecureToken()
 			player := player.Player{
@@ -828,7 +828,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				currentRoom.Game.GussedPlayerIds = append(currentRoom.Game.GussedPlayerIds, currentPlayer.Id)
 				currentRoom.Game.Scores[currentPlayer.Id] += points
 				currentRoom.Game.Scores[currentRoom.Game.CurrentDrawerPlayerId] += 20
-				
+
 				if currentRoom.Game.TurnPoints == nil {
 					currentRoom.Game.TurnPoints = make(map[string]int)
 				}
@@ -867,6 +867,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				fmt.Println("ERR in EventDrawStroke unmarshal:", err)
 				continue
 			}
+			fmt.Println("draw sreoke ", drawStrokePayload)
 
 			if drawStrokePayload.PlayerId == "" {
 				fmt.Println("EventDrawStroke: Player ID is required")
@@ -899,6 +900,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 				fmt.Println("EventDrawStroke: Sender is not the current drawer")
 				continue
 			}
+			fmt.Println("drawstrok recived")
 
 			// Broadcast to other players in the room
 			for _, playerId := range currentRoom.Players {
@@ -1205,14 +1207,14 @@ func (h *WebSocketHandler) handleDisconnet(playerId string) {
 		if playerId == currentRoom.Game.CurrentDrawerPlayerId {
 			if len(currentRoom.Players) > 0 {
 				currentRoom.Game.DrawerIndex = (currentRoom.Game.DrawerIndex - 1 + len(currentRoom.Players)) % len(currentRoom.Players)
-				
+
 				h.BroadcastChatMessage(currentRoom, protocol.ChatMessagePayload{
 					PlayerId: "system",
 					Nickname: "System",
 					Message:  fmt.Sprintf("%s (the drawer) disconnected! Ending turn early...", player.Nickname),
 					Type:     "system",
 				})
-				
+
 				h.EndDrawingTurn(currentRoom)
 			}
 		}
