@@ -879,318 +879,406 @@ function GameScreen({ payload }) {
                           </div>
                         );
                       })}
-                  </div>
+                </div>
 
-                  {/* Transition countdown bar */}
-                  <div style={{ width: "100%", maxWidth: "360px" }}>
-                    <div
+                {/* Transition countdown bar */}
+                <div style={{ width: "100%", maxWidth: "360px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "0.4rem",
+                    }}
+                  >
+                    <p
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "0.4rem",
+                        fontSize: "0.85rem",
+                        color: "var(--metallic-silver)",
+                        margin: 0,
                       }}
                     >
-                      <p
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--metallic-silver)",
-                          margin: 0,
-                        }}
-                      >
-                        Next drawer:{" "}
-                        <span
-                          style={{ color: "var(--hot-pink)", fontWeight: "bold" }}
-                        >
-                          {turnSummary?.nextDrawerNickname}
-                        </span>
-                      </p>
+                      Next drawer:{" "}
                       <span
-                        style={{
-                          fontSize: "0.8rem",
-                          color: "rgba(192,192,192,0.5)",
-                        }}
+                        style={{ color: "var(--hot-pink)", fontWeight: "bold" }}
                       >
-                        {timeLeft}s
+                        {turnSummary?.nextDrawerNickname}
                       </span>
-                    </div>
-                    <div
+                    </p>
+                    <span
                       style={{
-                        background: "rgba(0, 128, 255, 0.12)",
-                        borderRadius: "4px",
-                        height: "5px",
-                        overflow: "hidden",
-                        border: "1px solid rgba(0, 128, 255, 0.2)",
+                        fontSize: "0.8rem",
+                        color: "rgba(192,192,192,0.5)",
                       }}
                     >
-                      <div
-                        style={{
-                          background: "var(--cyan)",
-                          boxShadow: "var(--shadow-cyan)",
-                          height: "100%",
-                          borderRadius: "4px",
-                          width: `${transitionProgress}%`,
-                          transition: "width 1s linear",
-                        }}
-                      />
-                    </div>
+                      {timeLeft}s
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      background: "rgba(0, 128, 255, 0.12)",
+                      borderRadius: "4px",
+                      height: "5px",
+                      overflow: "hidden",
+                      border: "1px solid rgba(0, 128, 255, 0.2)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: "var(--cyan)",
+                        boxShadow: "var(--shadow-cyan)",
+                        height: "100%",
+                        borderRadius: "4px",
+                        width: `${transitionProgress}%`,
+                        transition: "width 1s linear",
+                      }}
+                    />
                   </div>
                 </div>
-              ) : gameStatus === "ended" ? (
-                /* GAME OVER */
-                <div
-                  className="retro-card"
+              </div>
+            ) : gameStatus === "ended" ? (
+              /* GAME OVER */
+              <div
+                className="retro-card"
+                style={{
+                  minHeight: "400px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  backgroundColor: "rgba(11, 11, 22, 0.4)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                <h2
                   style={{
-                    minHeight: "400px",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    backgroundColor: "rgba(11, 11, 22, 0.4)",
-                    fontFamily: "var(--font-mono)",
+                    color: "var(--hot-pink)",
+                    textShadow: "var(--shadow-pink)",
+                    marginBottom: "0.5rem",
                   }}
                 >
-                  <h2
-                    style={{
-                      color: "var(--hot-pink)",
-                      textShadow: "var(--shadow-pink)",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    GAME OVER
-                  </h2>
-                  <table
-                    style={{
-                      width: "80%",
-                      maxWidth: "400px",
-                      borderCollapse: "collapse",
-                      fontFamily: "var(--font-mono)",
-                      margin: "1rem 0",
-                    }}
-                  >
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid var(--neon-blue)" }}>
-                        <th style={{ padding: "0.5rem", textAlign: "left" }}>
-                          Player
-                        </th>
-                        <th style={{ padding: "0.5rem", textAlign: "right" }}>
-                          Score
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {gameSummary &&
-                        gameSummary.players &&
-                        [...gameSummary.players]
-                          .sort(
-                            (a, b) => (b.score || 0) - (a.score || 0),
-                          )
-                          .map((p, idx) => (
-                            <tr
-                              key={p.playerId}
+                  GAME OVER
+                </h2>
+                <table
+                  style={{
+                    width: "80%",
+                    maxWidth: "400px",
+                    borderCollapse: "collapse",
+                    fontFamily: "var(--font-mono)",
+                    margin: "1rem 0",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--neon-blue)" }}>
+                      <th style={{ padding: "0.5rem", textAlign: "left" }}>
+                        Player
+                      </th>
+                      <th style={{ padding: "0.5rem", textAlign: "right" }}>
+                        Score
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gameSummary &&
+                      gameSummary.players &&
+                      [...gameSummary.players]
+                        .sort((a, b) => (b.score || 0) - (a.score || 0))
+                        .map((p, idx) => (
+                          <tr
+                            key={p.playerId}
+                            style={{
+                              borderBottom: "1px solid rgba(0, 128, 255, 0.1)",
+                            }}
+                          >
+                            <td
                               style={{
-                                borderBottom: "1px solid rgba(0, 128, 255, 0.1)",
+                                padding: "0.5rem",
+                                fontWeight: idx === 0 ? "bold" : "normal",
+                                color:
+                                  idx === 0
+                                    ? "var(--hot-pink)"
+                                    : "var(--metallic-silver)",
+                                textShadow:
+                                  idx === 0 ? "var(--shadow-pink)" : "none",
                               }}
                             >
-                              <td
-                                style={{
-                                  padding: "0.5rem",
-                                  fontWeight: idx === 0 ? "bold" : "normal",
-                                  color:
-                                    idx === 0
-                                      ? "var(--hot-pink)"
-                                      : "var(--metallic-silver)",
-                                  textShadow:
-                                    idx === 0 ? "var(--shadow-pink)" : "none",
-                                }}
-                              >
-                                {idx === 0 && "🏆 "}
-                                {p.nickname}
-                              </td>
-                              <td
-                                style={{
-                                  padding: "0.5rem",
-                                  textAlign: "right",
-                                  fontWeight: "bold",
-                                  color: "var(--cyan)",
-                                  textShadow: "var(--shadow-cyan)",
-                                }}
-                              >
-                                {p.score}
-                              </td>
-                            </tr>
-                          ))}
-                    </tbody>
-                  </table>
-                  <button
-                    className="btn btn-primary"
-                    onClick={handlePlayAgain}
-                    style={{ marginTop: "1rem" }}
-                  >
-                    Play Again
-                  </button>
-                </div>
-              ) : (
-                /* ═══ CANVAS + DRAWING TOOLS ═══════════════════════════════════ */
+                              {idx === 0 && "🏆 "}
+                              {p.nickname}
+                            </td>
+                            <td
+                              style={{
+                                padding: "0.5rem",
+                                textAlign: "right",
+                                fontWeight: "bold",
+                                color: "var(--cyan)",
+                                textShadow: "var(--shadow-cyan)",
+                              }}
+                            >
+                              {p.score}
+                            </td>
+                          </tr>
+                        ))}
+                  </tbody>
+                </table>
+                <button
+                  className="btn btn-primary"
+                  onClick={handlePlayAgain}
+                  style={{ marginTop: "1rem" }}
+                >
+                  Play Again
+                </button>
+              </div>
+            ) : (
+              /* ═══ CANVAS + DRAWING TOOLS ═══════════════════════════════════ */
+              <div
+                className="retro-card"
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                  backgroundColor: "rgba(11, 11, 22, 0.4)",
+                  padding: "1rem",
+                }}
+              >
+                {/* Drawing tools */}
                 <div
-                  className="retro-card"
+                  id="draw-toolbar"
                   style={{
-                    flex: 1,
                     display: "flex",
-                    flexDirection: "column",
-                    gap: "1rem",
-                    backgroundColor: "rgba(11, 11, 22, 0.4)",
-                    padding: "1rem",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    flexWrap: "wrap",
+                    borderBottom: "1px solid rgba(0, 128, 255, 0.15)",
+                    paddingBottom: "0.75rem",
                   }}
                 >
-                  {/* Drawing tools */}
+                  {COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setBrushColor(c)}
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "50%",
+                        border:
+                          brushColor === c
+                            ? "2px solid var(--cyan)"
+                            : "2px solid transparent",
+                        backgroundColor: c,
+                        cursor: "pointer",
+                        transition: "border 0.15s, transform 0.15s",
+                        transform: brushColor === c ? "scale(1.2)" : "scale(1)",
+                        boxShadow:
+                          brushColor === c ? "0 0 8px var(--cyan)" : "none",
+                      }}
+                    />
+                  ))}
+
+                  <div style={{ flex: 1, minWidth: "1px" }} />
+
+                  {/* Brush Size */}
                   <div
-                    id="draw-toolbar"
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "0.75rem",
-                      flexWrap: "wrap",
-                      borderBottom: "1px solid rgba(0, 128, 255, 0.15)",
-                      paddingBottom: "0.75rem",
+                      gap: "0.5rem",
                     }}
                   >
-                    {COLORS.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setBrushColor(c)}
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "50%",
-                          border:
-                            brushColor === c
-                              ? "2px solid var(--cyan)"
-                              : "2px solid transparent",
-                          backgroundColor: c,
-                          cursor: "pointer",
-                          transition: "border 0.15s, transform 0.15s",
-                          transform:
-                            brushColor === c ? "scale(1.2)" : "scale(1)",
-                          boxShadow:
-                            brushColor === c
-                              ? "0 0 8px var(--cyan)"
-                              : "none",
-                        }}
-                      />
-                    ))}
+                    <span
+                      className="form-label"
+                      style={{ margin: 0, fontSize: "0.75rem" }}
+                    >
+                      Size
+                    </span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="20"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(Number(e.target.value))}
+                      style={{ width: "80px" }}
+                    />
+                  </div>
 
-                    <div style={{ flex: 1, minWidth: "1px" }} />
+                  {/* Eraser toggle */}
+                  <button
+                    className={
+                      isEraserMode ? "btn btn-primary" : "btn btn-secondary"
+                    }
+                    onClick={() => setIsEraserMode((prev) => !prev)}
+                    style={{
+                      padding: "0.4rem 1rem",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    {isEraserMode ? "✓ Eraser" : "Eraser"}
+                  </button>
 
-                    {/* Brush Size */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span
-                        className="form-label"
-                        style={{ margin: 0, fontSize: "0.75rem" }}
-                      >
-                        Size
-                      </span>
-                      <input
-                        type="range"
-                        min="1"
-                        max="20"
-                        value={brushSize}
-                        onChange={(e) => setBrushSize(Number(e.target.value))}
-                        style={{ width: "80px" }}
-                      />
-                    </div>
+                  {/* Clear board */}
+                  <button
+                    className="btn btn-danger"
+                    onClick={handleClearCanvas}
+                    style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
+                  >
+                    Clear
+                  </button>
 
-                    {/* Eraser toggle */}
-                    <button
-                      className={isEraserMode ? "btn btn-primary" : "btn btn-secondary"}
-                      onClick={() => setIsEraserMode((prev) => !prev)}
+                  {/* Undo */}
+                  <button
+                    className="btn btn-secondary"
+                    onClick={triggerUndo}
+                    disabled={strokeHistoryRef.current.length === 0}
+                    style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
+                  >
+                    Undo
+                  </button>
+                </div>
+
+                {/* Canvas */}
+                <canvas
+                  ref={canvasRef}
+                  width={1000}
+                  height={600}
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    aspectRatio: "1000 / 600",
+                    backgroundColor: "#fff",
+                    borderRadius: "0.4rem",
+                    cursor: isDrawer ? "crosshair" : "default",
+                    touchAction: "none",
+                  }}
+                  onMouseDown={handleStartDraw}
+                  onMouseMove={handleDraw}
+                  onMouseUp={handleEndDraw}
+                  onMouseLeave={handleEndDraw}
+                  onTouchStart={handleStartDraw}
+                  onTouchMove={handleDraw}
+                  onTouchEnd={handleEndDraw}
+                />
+              </div>
+            )}
+          </div>
+        )}
+        {/* CHAT + PLAYERS + WORD SELECT (during game active) */}
+        {gameStatus !== "wating" && (
+          <div
+            className="retro-card"
+            style={{
+              flex: "1 1 300px",
+              minWidth: "250px",
+              height: "100%",
+              maxHeight: "720px",
+              display: "flex",
+              flexDirection: "column",
+              padding: "1.25rem",
+              overflow: "hidden",
+              backgroundColor: "rgba(11, 11, 22, 0.6)",
+            }}
+          >
+            <span
+              className="form-label"
+              style={{
+                borderBottom: "1.5px solid rgba(0, 128, 255, 0.2)",
+                paddingBottom: "0.5rem",
+                marginBottom: "0.5rem",
+              }}
+            >
+              Comms Feed
+            </span>
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                overflowX: "hidden",
+                padding: "0.5rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+                fontSize: "0.9rem",
+                minHeight: 0,
+              }}
+            >
+              {chatMessages &&
+                chatMessages.map((msg, index) => {
+                  let color = "var(--metallic-silver)";
+                  let fontWeight = "normal";
+                  let fontStyle = "normal";
+                  if (msg.type === "system") {
+                    color = "var(--neon-blue)";
+                    fontWeight = "bold";
+                  } else if (msg.type === "correct") {
+                    color = "var(--cyan)";
+                    fontWeight = "bold";
+                  } else if (msg.type === "join" || msg.type === "leave") {
+                    color = "rgba(192, 192, 192, 0.5)";
+                    fontStyle = "italic";
+                  }
+                  return (
+                    <div
+                      key={index}
                       style={{
-                        padding: "0.4rem 1rem",
-                        fontSize: "0.8rem",
+                        wordBreak: "break-word",
+                        color,
+                        fontWeight,
+                        fontStyle,
                       }}
                     >
-                      {isEraserMode ? "✓ Eraser" : "Eraser"}
-                    </button>
-
-                    {/* Clear board */}
-                    <button
-                      className="btn btn-danger"
-                      onClick={handleClearCanvas}
-                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
-                    >
-                      Clear
-                    </button>
-
-                    {/* Undo */}
-                    <button
-                      className="btn btn-secondary"
-                      onClick={triggerUndo}
-                      disabled={strokeHistoryRef.current.length === 0}
-                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
-                    >
-                      Undo
-                    </button>
-                  </div>
-
-                  {/* Canvas */}
-                  <canvas
-                    ref={canvasRef}
-                    width={1000}
-                    height={600}
-                    style={{
-                      width: "100%",
-                      height: "auto",
-                      aspectRatio: "1000 / 600",
-                      backgroundColor: "#fff",
-                      borderRadius: "0.4rem",
-                      cursor: isDrawer ? "crosshair" : "default",
-                      touchAction: "none",
-                    }}
-                    onMouseDown={handleStartDraw}
-                    onMouseMove={handleDraw}
-                    onMouseUp={handleEndDraw}
-                    onMouseLeave={handleEndDraw}
-                    onTouchStart={handleStartDraw}
-                    onTouchMove={handleDraw}
-                    onTouchEnd={handleEndDraw}
-                  />
-                </div>
-              )}
-
-              {/* CHAT + PLAYERS + WORD SELECT (during game active) */}
-              {gameStatus !== "selecting_word" &&
-                gameStatus !== "turn_transition" && (
-                  <div className="retro-card" style={{ padding: "1.25rem" }}>
-                    {/* Chat / guess input */}
-                    <form onSubmit={handleSendChat} style={{ display: "flex", gap: "0.5rem" }}>
-                      <input
-                        type="text"
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder={
-                          isDrawer
-                            ? "Chat with guessers..."
-                            : hasGuessedCorrectly
-                              ? "You guessed correctly!"
-                              : "Type your guess..."
-                        }
-                        className="input-retro"
-                        disabled={
-                          (gameStatus === "in_progress" && hasGuessedCorrectly) ||
-                          gameStatus === "turn_transition"
-                        }
-                      />
-                      <button
-                        type="submit"
-                        className="btn btn-primary"
-                      >
-                        Send
-                      </button>
-                    </form>
-                  </div>
-                )}
+                      {msg.type === "chat" ? (
+                        <>
+                          <strong style={{ color: "var(--hot-pink)" }}>
+                            {msg.nickname}:
+                          </strong>{" "}
+                          {msg.message}
+                        </>
+                      ) : (
+                        msg.message
+                      )}
+                    </div>
+                  );
+                })}
+              <div ref={chatEndRef} />
             </div>
-          )}
+
+            <form
+              onSubmit={handleSendChat}
+              style={{
+                display: "flex",
+                gap: "0.5rem",
+                marginTop: "0.75rem",
+                borderTop: "1px solid rgba(0, 128, 255, 0.15)",
+                paddingTop: "0.75rem",
+              }}
+            >
+              <input
+                className="retro-input"
+                type="text"
+                placeholder={
+                  isDrawer
+                    ? "Drawer cannot chat..."
+                    : hasGuessedCorrectly
+                      ? "✓ You guessed it!"
+                      : gameStatus === "in_progress"
+                        ? "Type your guess..."
+                        : "Transmit message..."
+                }
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={isDrawer || hasGuessedCorrectly}
+                style={{ flex: 1, padding: "0.5rem", fontSize: "0.9rem" }}
+              />
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={isDrawer || hasGuessedCorrectly}
+                style={{ padding: "0.5rem 1rem", fontSize: "0.9rem" }}
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );
