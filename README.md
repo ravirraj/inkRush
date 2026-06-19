@@ -8,7 +8,7 @@ A real-time multiplayer drawing and guessing game inspired by Skribbl.io, built 
 
 ## Demo
 
-https://github.com/user-attachments/assets/inkrush_demo.mp4
+![Demo](./public/video/inkrush_demo.gif)
 
 ---
 
