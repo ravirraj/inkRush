@@ -1,41 +1,74 @@
 # inkRush
 
-A real-time multiplayer drawing and guessing game inspired by Skribbl.io, designed with a retro-futuristic synthwave aesthetic.
+A real-time multiplayer drawing and guessing game inspired by Skribbl.io, built with a retro-futuristic synthwave aesthetic.
+
+![Landing Page](./public/pics/landing.png)
 
 ---
 
-## 🚀 Key Features
+## Demo
 
-*   **Real-time Synced Canvas:** Instant coordinate broadcast using normalized canvas bounds to ensure consistent resolution rendering on all devices.
-*   **Room-Based Multiplayer:** Instant room creation, join codes, and invite links.
-*   **Live Chat & Guesses:** Dual-purpose comms panel that acts as standard chat during lobby states, and switches to correct guess filtering during turns.
-*   **Automatic Game Loop:** Server-driven game phases (word selection, drawing, turn transition) managed via tick timers.
-*   **Secure Session IDs:** Predictable IDs are replaced with high-entropy cryptographic strings.
-*   **Robust Disconnect Logic:** Gracefully manages player departures and transitions turns instantly if the drawer leaves.
-*   **Client Connection Rate Limiter:** Protects resources by dropping socket message flooding.
+https://github.com/user-attachments/assets/inkrush_demo.mp4
 
 ---
 
-## 🛠️ Tech Stack
+## Screenshots
+
+| Landing | Lobby | Word Selection |
+|---------|-------|----------------|
+| ![Landing](./public/pics/landing.png) | ![Standby](./public/pics/standby.png) | ![Player Choosing Word](./public/pics/player_choosing_word.png) |
+
+| Drawing | Canvas Sync | Scoreboard |
+|---------|-------------|------------|
+| ![You Choosing Word](./public/pics/you_choosing_word.png) | ![Canvas Sync](./public/pics/canvas_sync.png) | ![Score](./public/pics/score.png) |
+
+| Full Canvas View |
+|------------------|
+| ![Canvas](./public/pics/canvas.png) |
+
+---
+
+## Key Features
+
+- **Real-time Synced Canvas** - Instant coordinate broadcast using normalized canvas bounds for consistent rendering across all devices.
+- **Room-Based Multiplayer** - Create rooms, share join codes, or send invite links.
+- **Live Chat & Guesses** - Dual-purpose panel: standard chat in lobby, correct-guess filtering during turns.
+- **Automatic Game Loop** - Server-driven phases (word selection, drawing, turn transition) managed via tick timers.
+- **Secure Session IDs** - High-entropy cryptographic strings replace predictable IDs.
+- **Robust Disconnect Logic** - Graceful player departure handling with instant turn transitions when the drawer leaves.
+- **Client Rate Limiter** - Protects resources by dropping socket message floods.
+
+---
+
+## Tech Stack
 
 ### Frontend
-*   **React + Vite:** Single Page Application (SPA).
-*   **HTML5 Canvas API:** Interactive drawer controls (color palette, brush size, eraser, undo actions).
-*   **Custom Hooks & Services:** Encapsulated WebSocket management (`useWebSocket` hook + `WebSocketService`).
-*   **Aesthetics:** Retro-Futuristic styling (Share Tech Mono Google font, neon glow animations, CRT scanline overlay, styling variables).
+
+| Technology | Purpose |
+|------------|---------|
+| React + Vite | SPA framework and build tooling |
+| HTML5 Canvas API | Interactive drawing (color palette, brush size, eraser, undo) |
+| Custom Hooks | Encapsulated WebSocket management (`useWebSocket` + `WebSocketService`) |
+| Synthwave Theme | Share Tech Mono font, neon glow animations, CRT scanline overlay |
 
 ### Backend
-*   **Go (Golang):** High-concurrency network runtime.
-*   **Gin Gonic:** Web routing and health endpoints.
-*   **Gorilla WebSocket:** Robust TCP socket upgrades and frame transmissions.
-*   **Thread-Safe Memory Stores:** Concurrent repository mappings protected by `sync.Mutex`.
+
+| Technology | Purpose |
+|------------|---------|
+| Go (Golang) | High-concurrency network runtime |
+| Gin Gonic | Web routing and health endpoints |
+| Gorilla WebSocket | TCP socket upgrades and frame transmission |
+| Thread-Safe Stores | Concurrent in-memory repositories with `sync.Mutex` |
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 .
+├── public/                 # Static assets
+│   ├── pics/               # Screenshots and images
+│   └── video/              # Demo video
 ├── client/                 # React frontend application
 │   ├── src/
 │   │   ├── components/     # UI screens (HomeScreen, Lobby, GameScreen)
@@ -61,9 +94,7 @@ A real-time multiplayer drawing and guessing game inspired by Skribbl.io, design
 
 ---
 
-## 📊 UML Architecture & Sequence Diagrams
-
-To visualize how the client and server communicate under the hood, these UML diagrams outline the messaging protocol, game loops, and reconnection flows.
+## Architecture & Sequence Diagrams
 
 ### 1. Connection, Game Loop, & Reconnect Lifecycle
 
@@ -72,7 +103,7 @@ This sequence diagram illustrates a standard lifecycle from two players joining,
 ![Sequence Diagram](./docs/diagram/sequence_diagram.png)
 
 <details>
-<summary>💻 View Mermaid Source Code</summary>
+<summary>View Mermaid Source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -133,7 +164,7 @@ Rooms transition through specific game phases on the backend server. These are c
 ![State Diagram](./docs/diagram/state_diagram.png)
 
 <details>
-<summary>💻 View Mermaid Source Code</summary>
+<summary>View Mermaid Source</summary>
 
 ```mermaid
 stateDiagram-v2
@@ -150,42 +181,33 @@ stateDiagram-v2
 
 ---
 
-## ⚡ Quick Start (Docker Compose)
+## Quick Start
 
-The entire application can be spun up locally in production-mimicked mode with a single command.
+### Docker Compose (Recommended)
+
+Spin up the entire application with a single command:
 
 ```bash
 docker compose up --build
 ```
 
-*   **Frontend Client:** Access at [http://localhost:5173](http://localhost:5173)
-*   **Backend Server:** Available at [http://localhost:8080](http://localhost:8080) (WebSocket path: `ws://localhost:8080/ws`)
+- **Frontend:** http://localhost:5173
+- **Backend:** http://localhost:8080 (WebSocket: `ws://localhost:8080/ws`)
 
----
+### Local Development
 
-## 🔧 Local Development Setup
+**Backend (Go)**
 
-### Backend Server Setup
-1. Move to the server directory:
-   ```bash
-   cd server
-   ```
-2. Build and run the server (dependencies will install automatically):
-   ```bash
-   go run ./cmd/api
-   ```
+```bash
+cd server
+go run ./cmd/api
+```
 
-### Frontend Client Setup
-1. Move to the client directory:
-   ```bash
-   cd client
-   ```
-2. Create your local `.env` configuration file:
-   ```bash
-   cp .env.sample .env
-   ```
-3. Install dependencies and start the Vite dev server:
-   ```bash
-   npm install
-   npm run dev
-   ```
+**Frontend (React)**
+
+```bash
+cd client
+cp .env.sample .env
+npm install
+npm run dev
+```
